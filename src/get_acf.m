@@ -1,4 +1,4 @@
-function [acf, lags, ap_linear, mX, freq, ap_par] = get_acf(x, fs, varargin)
+function [acf, lags, ap_linear, mX, freq, ap_par, x_norm] = get_acf(x, fs, varargin)
 % Get autocorrelation of time-domain x. Optionally removes 1/f component. 
 % 
 % Parameters
@@ -40,7 +40,12 @@ function [acf, lags, ap_linear, mX, freq, ap_par] = get_acf(x, fs, varargin)
 % 
 
 parser = inputParser; 
+addParameter(parser, 'fit_ap', false)
 addParameter(parser, 'rm_ap', false)
+addParameter(parser, 'normalize_x', true)
+addParameter(parser, 'force_x_positive', false)
+addParameter(parser, 'normalize_acf_to_1', true)
+addParameter(parser, 'normalize_acf_z', true)
 addParameter(parser, 'fit_knee', false)
 addParameter(parser, 'min_freq', 0.1)
 addParameter(parser, 'max_freq', fs/2)
@@ -50,6 +55,11 @@ addParameter(parser, 'bins', [2, 5])
 parse(parser, varargin{:})
 
 rm_ap               = parser.Results.rm_ap; 
+fit_ap              = parser.Results.fit_ap | rm_ap; % if rm_ap requested we have to fit anyway
+force_x_positive    = parser.Results.force_x_positive; 
+normalize_x         = parser.Results.normalize_x; 
+normalize_acf_to_1  = parser.Results.normalize_acf_to_1; 
+normalize_acf_z     = parser.Results.normalize_acf_z; 
 fit_knee            = parser.Results.fit_knee; 
 min_freq            = parser.Results.min_freq; 
 max_freq            = parser.Results.max_freq; 
@@ -61,12 +71,22 @@ if isrow(f0_to_ignore)
     f0_to_ignore = f0_to_ignore'; 
 end
 
+% check if x is a row vector (common mistake, the warnings are cryptic...)
+if iscolumn(x)
+    warning('input must be a row (got column instead)...transposing...')
+    x = x'; 
+end
+
+% normalize to mean 0 var 1
+if normalize_x
+    x = zscore(x, 1, ndims(x)); 
+end
+
 % check if x is strictly positive
-if any(x < 0)
-    warning(...
-        strcat('Time-domain input signal is not strictly positive. ', ...
-               'This may lead to biased measures of periodicity from autocorelation.')...
-           ); 
+if any(x(:) < 0) && force_x_positive
+    warning(strcat('Forcing x to be positive...')); 
+    % make the signal purely positive
+    x = x - min(x, [], ndims(x));    
 end
 
 % allocate
@@ -78,6 +98,7 @@ freq = [];
 ap_all = [];
 ap_linear = [];
 ap_par = []; 
+x_norm = []; 
 
 N = size(x, ndims(x)); 
 hN = floor( (N + 1) / 2); 
@@ -97,13 +118,10 @@ index{end} = [1:hN];
 mX = mX(index{:}); 
 
 
-if ~rm_ap
-    
-    % get autocorrelation from FFT
-    X = fft(x, [], ndims(x)) / N * 2; 
-    acf = (real(ifft(X .* conj(X), [], ndims(x)))); 
+% fit 1/f if requested
+% --------------------
 
-else
+if fit_ap
     
     min_freq_idx = dsearchn(freq, min_freq); 
     max_freq_idx = dsearchn(freq, max_freq); 
@@ -190,6 +208,14 @@ else
         end
     end    
 
+end
+
+
+% get ACF
+% -------
+
+if rm_ap
+
     % use the estimated aperiodic to get normalized ACF 
     X = fft(x, [], ndims(x)) ./ N .* 2; 
 
@@ -212,11 +238,29 @@ else
 
     X_norm = X ./ ap_whole_spect; 
     
+    x_norm = real(ifft(X_norm, [], ndims(x))); 
+    
     acf = real(ifft(X_norm .* conj(X_norm), [], ndims(x))); 
 
+else
+    
+    % get autocorrelation from FFT
+    X = fft(x, [], ndims(x)) / N * 2; 
+    acf = (real(ifft(X .* conj(X), [], ndims(x)))); 
+        
 end
 
+% scale to +-1
+if normalize_acf_to_1
+    acf = acf ./ max(abs(acf), [], ndims(acf)); 
+end
 
+% zscore acf
+if normalize_acf_z
+    acf = zscore(acf, 1, ndims(acf)); 
+end
+
+% only output acf lags up to N/2 
 index = cell(1, ndims(x));
 index(:) = {':'};
 index{end} = 1:hN;   
@@ -233,16 +277,17 @@ if lags(1) == 0
     acf(index_0{:}) = acf(index_1{:}); 
 end
 
-
-if ~isrow(freq)
-    freq = freq'; 
-end
-
-% set DC to 0
+% set DC to 0 for output
 index = cell(1, ndims(x));
 index(:) = {':'};
 index{end} = 1;
 mX(index{:}) = 0; 
+
+% make sure frequencies are a row vector
+if ~isrow(freq)
+    freq = freq'; 
+end
+
 
 
 
