@@ -46,6 +46,7 @@ addParameter(parser, 'normalize_x', true)
 addParameter(parser, 'force_x_positive', false)
 addParameter(parser, 'normalize_acf_to_1', true)
 addParameter(parser, 'normalize_acf_z', true)
+addParameter(parser, 'get_x_norm', false)
 addParameter(parser, 'fit_knee', false)
 addParameter(parser, 'min_freq', 0.1)
 addParameter(parser, 'max_freq', fs/2)
@@ -60,6 +61,7 @@ force_x_positive    = parser.Results.force_x_positive;
 normalize_x         = parser.Results.normalize_x; 
 normalize_acf_to_1  = parser.Results.normalize_acf_to_1; 
 normalize_acf_z     = parser.Results.normalize_acf_z; 
+get_x_norm          = parser.Results.get_x_norm; 
 fit_knee            = parser.Results.fit_knee; 
 min_freq            = parser.Results.min_freq; 
 max_freq            = parser.Results.max_freq; 
@@ -218,27 +220,40 @@ if rm_ap
 
     % use the estimated aperiodic to get normalized ACF 
     X = fft(x, [], ndims(x)) ./ N .* 2; 
+    
+    % If the first frequency bin is zero, the value of estimated aperiodic
+    % value will be Inf. As we're going to divide by AP bin by bin, let's set
+    % this value to 1 (instead of Inf). This will keep the DC magnitude
+    % untouched. 
+    ap_for_norm = ap_linear; 
+    if freq(1) == 0
+        index = repmat({':'}, 1, ndims(x)); 
+        index{end} = 1; 
+        ap_for_norm(index{:}) = 1; 
+    end
 
     if mod(N, 2) == 0
         ap_whole_spect = cat(...
                              ndims(x),...
-                             ap_linear, ...
-                             flip(ap_linear, ndims(x))...
+                             ap_for_norm, ...
+                             flip(ap_for_norm, ndims(x))...
                              ); 
     else
         index = cell(1, ndims(x));
         index(:) = {':'};
-        index{end} = [2 : size(ap_linear, ndims(ap_linear))];      
+        index{end} = [2 : size(ap_for_norm, ndims(ap_for_norm))];      
         ap_whole_spect = cat(...
                              ndims(x), ...
-                             ap_linear, ...
-                             flip(ap_linear(index{:}), ndims(x))...
+                             ap_for_norm, ...
+                             flip(ap_for_norm(index{:}), ndims(x))...
                              ); 
     end
 
     X_norm = X ./ ap_whole_spect; 
     
-    x_norm = real(ifft(X_norm, [], ndims(x))); 
+    if get_x_norm
+        x_norm = real(ifft(X_norm, [], ndims(x))); 
+    end
     
     acf = real(ifft(X_norm .* conj(X_norm), [], ndims(x))); 
 
