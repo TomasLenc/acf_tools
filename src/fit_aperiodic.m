@@ -12,11 +12,14 @@ function theta_opt = fit_aperiodic(x, y, varargin)
 %     Whether to use the knee parameter when fitting 1/f. 
 % method : {'fminunc', 'lsq'}, default='fminunc'
 %     Which matlab fitting method implementation to use. 
+% init : array_like
+%     [offset, knee, exponent] vector of initialization parameters if fitting
+%     with knee, else [offset, exponent]
 %
 % Returns
 % -------
 % theta_opt : array_like
-%     Array of estimated 1/f parameters. 
+%     Array of 1/f parametersestimated by optimizing least-squares cost. 
 %     
 % 
 
@@ -64,6 +67,7 @@ if isempty(theta_init)
     end
 end
 
+% These two methods (lsqnonlin and fminunc) should be equivalent 
 if strcmp(method, 'lsq')
     
     options = optimoptions('lsqnonlin', ...

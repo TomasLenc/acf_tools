@@ -4,7 +4,7 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm] = get_acf(x, fs, varar
 % Parameters
 % ----------
 % x : array_like, shape=[..., time]
-%     Input x with time as the last dimension
+%     Input x with time as the last dimension. 
 % fs : int
 %     Sampling rate. 
 % rm_ap : bool, default=false
@@ -22,6 +22,14 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm] = get_acf(x, fs, varar
 % bins : [int, int], default=[2, 5]
 %     Minimum and maximum frequency bin (on both sides) used to ignore 
 %     frequencies during 1/f fitting.
+% get_x_norm : bool, default=false
+%     Whether to also return 1/f-subtracted signal in the time domain. 
+% normalize_x : bool, default=true
+%     Normalize time-domain input to mean 0 and SD 1 (i.e. zscore). 
+% normalize_acf_to_1 : bool, default=false
+%     Divide the resulting ACF by its maximum value. 
+% normalize_acf_z : bool, default=false
+%     Normalize the restulting ACF to mean 0 and SD 1 (i.e. zscore). 
 % 
 % Returns 
 % -------
@@ -44,8 +52,8 @@ addParameter(parser, 'fit_ap', false)
 addParameter(parser, 'rm_ap', false)
 addParameter(parser, 'normalize_x', true)
 addParameter(parser, 'force_x_positive', false)
-addParameter(parser, 'normalize_acf_to_1', true)
-addParameter(parser, 'normalize_acf_z', true)
+addParameter(parser, 'normalize_acf_to_1', false)
+addParameter(parser, 'normalize_acf_z', false)
 addParameter(parser, 'get_x_norm', false)
 addParameter(parser, 'fit_knee', false)
 addParameter(parser, 'min_freq', 0.1)
@@ -73,13 +81,13 @@ if isrow(f0_to_ignore)
     f0_to_ignore = f0_to_ignore'; 
 end
 
-% check if x is a row vector (common mistake, the warnings are cryptic...)
+% check if x is a row vector (common mistake, the default warnings are cryptic...)
 if iscolumn(x)
     warning('input must be a row (got column instead)...transposing...')
     x = x'; 
 end
 
-% normalize to mean 0 var 1
+% normalize input to mean 0 var 1
 if normalize_x
     x = zscore(x, 1, ndims(x)); 
 end
@@ -87,7 +95,6 @@ end
 % check if x is strictly positive
 if any(x(:) < 0) && force_x_positive
     warning(strcat('Forcing x to be positive...')); 
-    % make the signal purely positive
     x = x - min(x, [], ndims(x));    
 end
 
@@ -102,22 +109,17 @@ ap_linear = [];
 ap_par = []; 
 x_norm = []; 
 
+% get whole-trial FFT
 N = size(x, ndims(x)); 
-hN = floor( (N + 1) / 2); 
-lags = [0 : hN-1] / fs; 
-
-
-% whole-trial FFT
-N = size(x, ndims(x)); 
-hN = ceil(N / 2); 
+hN = floor(N / 2) + 1; 
 freq = [0 : hN-1]' / N * fs; 
-
 mX = abs(fft(x, [], ndims(x))) / N * 2; 
-
-index = cell(1, ndims(x));
-index(:) = {':'};
-index{end} = [1:hN];
+index = repmat({':'}, 1, ndims(x));
+index{end} = [1 : hN];
 mX = mX(index{:}); 
+
+% get lags for ACF
+lags = [0 : hN-1] / fs; 
 
 
 % fit 1/f if requested
@@ -125,10 +127,12 @@ mX = mX(index{:});
 
 if fit_ap
     
+    % find frequencies which will be considered for the 1/f fit
     min_freq_idx = dsearchn(freq, min_freq); 
     max_freq_idx = dsearchn(freq, max_freq); 
     freq_to_fit = freq(min_freq_idx : max_freq_idx); 
     
+    % ignore all harmonics of f0 up to nyquist frequency
     nyq = fs/2; 
     freq_to_ignore = [f0_to_ignore : f0_to_ignore : nyq]'; 
     freq_to_ignore_idx = dsearchn(freq, freq_to_ignore); 
@@ -151,10 +155,8 @@ if fit_ap
         index{end} = freq_to_ignore_idx(i_f);
         mX_to_fit(index{:}) = mean_around_bin; 
     end
-        
-    % fit aperiodic 
-    % -------------
-    
+            
+    % allocate
     shape = size(x);
     shape(end) = length(freq); 
     ap_all = zeros(shape);
@@ -163,16 +165,18 @@ if fit_ap
 
     % time is on the last dimension - we will loop over everything else
     
-    % prepare index vector as cell, e.g. {1,2,3,4,':'} 
-    nv = ndims(x) - 1;  % Exclude last dimension
+    % prepare index vector as cell, e.g. {1,1,1,1,':'} 
+    nv = ndims(x) - 1;  % exclude last dimension
     idx_while_loop = [repmat({1}, 1, nv), {':'}]; 
     max_size_per_dim = size(x); % size of each dimension
     ready = false; 
     
     while ~ready
       
+        % get log power spectra
         log_pow = log10(squeeze(mX_to_fit(idx_while_loop{:})) .^ 2); 
 
+        % restrict only to frequency range for 1/f fitting
         log_pow_to_fit = log_pow(min_freq_idx : max_freq_idx); 
 
         if ~iscolumn(log_pow_to_fit)
@@ -184,10 +188,12 @@ if fit_ap
                             freq_to_fit, log_pow_to_fit, ...
                             'fit_knee', fit_knee); 
 
-        % generate aperiodic with the estimated parameters
+        % generate aperiodic with the estimated parameters across the whole
+        % frequency range 
         ap = aperiodic(ap_par{idx_while_loop{:}}, freq); 
         ap_all(idx_while_loop{:}) = ap; 
 
+        % convert from loq-power space to linear magnitude space 
         ap_pow = 10.^ap; 
         ap_linear(idx_while_loop{:}) = sqrt(ap_pow); 
 
@@ -218,7 +224,7 @@ end
 
 if rm_ap
 
-    % use the estimated aperiodic to get normalized ACF 
+    % get full complex spectra
     X = fft(x, [], ndims(x)) ./ N .* 2; 
     
     % If the first frequency bin is zero, the value of estimated aperiodic
@@ -232,13 +238,20 @@ if rm_ap
         ap_for_norm(index{:}) = 1; 
     end
 
+    % mirror the aperiodic compoent so we also have it for negative frequencies 
     if mod(N, 2) == 0
+        % even number of frequency bins => we have bin at pi/2 => make sure you
+        % don't copy this bin twice! 
+        index = cell(1, ndims(x));
+        index(:) = {':'};
+        index{end} = [2 : (size(ap_for_norm, ndims(ap_for_norm)) - 1)];      
         ap_whole_spect = cat(...
-                             ndims(x),...
+                             ndims(x), ...
                              ap_for_norm, ...
-                             flip(ap_for_norm, ndims(x))...
+                             flip(ap_for_norm(index{:}), ndims(x))...
                              ); 
     else
+        % odd number of frequency bins => no bin at pi/2 => just skip DC and mirror
         index = cell(1, ndims(x));
         index(:) = {':'};
         index{end} = [2 : size(ap_for_norm, ndims(ap_for_norm))];      
@@ -247,30 +260,36 @@ if rm_ap
                              ap_for_norm, ...
                              flip(ap_for_norm(index{:}), ndims(x))...
                              ); 
+
     end
 
+    % Divide each frequency bin by the estimated 1/f magnitude at that
+    % frequency -> if the spectrum precisely follows the 1/f component, all
+    % magnitudes shold be normalized to 0. 
     X_norm = X ./ ap_whole_spect; 
     
+    % Convert 1/f-normalized spectrum back to time domain. 
     if get_x_norm
         x_norm = real(ifft(X_norm, [], ndims(x))); 
     end
     
+    % get the autocorrelation frunciton from the normalized spectrum 
     acf = real(ifft(X_norm .* conj(X_norm), [], ndims(x))); 
 
 else
     
-    % get autocorrelation from FFT
+    % get raw autocorrelation (without 1/f normalization)
     X = fft(x, [], ndims(x)) / N * 2; 
     acf = (real(ifft(X .* conj(X), [], ndims(x)))); 
         
 end
 
-% scale to +-1
+% scale ACF to +-1
 if normalize_acf_to_1
     acf = acf ./ max(abs(acf), [], ndims(acf)); 
 end
 
-% zscore acf
+% zscore ACF
 if normalize_acf_z
     acf = zscore(acf, 1, ndims(acf)); 
 end
@@ -281,7 +300,7 @@ index(:) = {':'};
 index{end} = 1:hN;   
 acf = acf(index{:}); 
 
-% set acf at lag 0 to the value of lag 1
+% set acf at lag 0 to the value of lag 1 (it's just variance anyway)
 if lags(1) == 0
     index_0 = cell(1, ndims(x));
     index_0(:) = {':'};
@@ -292,7 +311,7 @@ if lags(1) == 0
     acf(index_0{:}) = acf(index_1{:}); 
 end
 
-% set DC to 0 for output
+% set DC to 0 for output (it's just the mean)
 index = cell(1, ndims(x));
 index(:) = {':'};
 index{end} = 1;
