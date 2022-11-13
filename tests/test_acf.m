@@ -3,6 +3,36 @@ function tests = test_acf
 end
 
 
+function test_ap_robust(test_case)
+    fs = 100; 
+    N = fs * 60; 
+    hN = floor(N/2)+1; 
+    freq = [0 : hN-1] / N * fs; 
+    freq = freq(2:end); 
+    mX = aperiodic([3, 1.5], freq); 
+    log_pow = log10(mX .^ 2); 
+    
+    theta1 = fit_aperiodic(freq, log_pow, 'robust', true); 
+    theta2 = fit_aperiodic(freq, log_pow, 'robust', false); 
+    
+    assert(all(abs(theta1 - theta2) < 0.01))
+    
+%     figure
+%     plot(freq, mX)
+%     hold on
+%     
+%     ap = aperiodic(theta1, freq); 
+%     ap_pow = 10.^ap; 
+%     ap_linear = sqrt(ap_pow); 
+%     plot(freq, ap_linear, 'linew', 3)
+%     
+%     ap = aperiodic(theta2, freq); 
+%     ap_pow = 10.^ap; 
+%     ap_linear = sqrt(ap_pow); 
+%     plot(freq, ap_linear, 'linew', 3)
+end
+
+
 function test_acf_multidim(test_case)
 
     fs = 100; 

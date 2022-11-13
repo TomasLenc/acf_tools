@@ -56,6 +56,7 @@ addParameter(parser, 'normalize_acf_to_1', false)
 addParameter(parser, 'normalize_acf_z', false)
 addParameter(parser, 'get_x_norm', false)
 addParameter(parser, 'fit_knee', false)
+addParameter(parser, 'robust', false)
 addParameter(parser, 'min_freq', 0.1)
 addParameter(parser, 'max_freq', fs/2)
 addParameter(parser, 'f0_to_ignore', [])
@@ -71,6 +72,7 @@ normalize_acf_to_1  = parser.Results.normalize_acf_to_1;
 normalize_acf_z     = parser.Results.normalize_acf_z; 
 get_x_norm          = parser.Results.get_x_norm; 
 fit_knee            = parser.Results.fit_knee; 
+robust              = parser.Results.robust; 
 min_freq            = parser.Results.min_freq; 
 max_freq            = parser.Results.max_freq; 
 f0_to_ignore        = parser.Results.f0_to_ignore; 
@@ -186,6 +188,7 @@ if fit_ap
         % fit aperiodic component
         ap_par{idx_while_loop{:}} = fit_aperiodic(...
                             freq_to_fit, log_pow_to_fit, ...
+                            'robust', robust, ...
                             'fit_knee', fit_knee); 
 
         % generate aperiodic with the estimated parameters across the whole
