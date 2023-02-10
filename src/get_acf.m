@@ -1,4 +1,5 @@
-function [acf, lags, ap_linear, mX, freq, ap_par, x_norm] = get_acf(x, fs, varargin)
+function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = ...
+                                                get_acf(x, fs, varargin)
 % Get autocorrelation of time-domain x. Optionally removes 1/f component. 
 % 
 % Parameters
@@ -45,6 +46,10 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm] = get_acf(x, fs, varar
 %     Frequencies for the FFT. 
 % ap_par : cell
 %     Parameters of the fittted 1/f component. 
+% x_norm : array_like
+%     1/f-normalized spectrum converted back to time domain (same shape as x).
+% ap_optim_exitflag : array_like
+%     Optimalization exitflag for each aperiodic fit. 
 % 
 
 parser = inputParser; 
@@ -57,6 +62,8 @@ addParameter(parser, 'normalize_acf_z', false)
 addParameter(parser, 'get_x_norm', false)
 addParameter(parser, 'fit_knee', false)
 addParameter(parser, 'robust', false)
+addParameter(parser, 'verbose', 0)
+addParameter(parser, 'max_iter', 5000)
 addParameter(parser, 'min_freq', 0.1)
 addParameter(parser, 'max_freq', fs/2)
 addParameter(parser, 'f0_to_ignore', [])
@@ -73,6 +80,8 @@ normalize_acf_z     = parser.Results.normalize_acf_z;
 get_x_norm          = parser.Results.get_x_norm; 
 fit_knee            = parser.Results.fit_knee; 
 robust              = parser.Results.robust; 
+verbose             = parser.Results.verbose; 
+max_iter            = parser.Results.max_iter; 
 min_freq            = parser.Results.min_freq; 
 max_freq            = parser.Results.max_freq; 
 f0_to_ignore        = parser.Results.f0_to_ignore; 
@@ -164,6 +173,7 @@ if fit_ap
     ap_all = zeros(shape);
     ap_linear = zeros(shape);
     ap_par = cell([shape(1:end-1), 1]); 
+    ap_optim_exitflag = nan([shape(1:end-1), 1]); 
 
     % time is on the last dimension - we will loop over everything else
     
@@ -186,10 +196,16 @@ if fit_ap
         end
         
         % fit aperiodic component
-        ap_par{idx_while_loop{:}} = fit_aperiodic(...
+        [ap_par_iter, ap_optim_exitflag_iter] = fit_aperiodic(...
                             freq_to_fit, log_pow_to_fit, ...
                             'robust', robust, ...
-                            'fit_knee', fit_knee); 
+                            'fit_knee', fit_knee,...
+                            'verbose', verbose,...
+                            'max_iter', max_iter...
+                            ); 
+                        
+        ap_par{idx_while_loop{:}} = ap_par_iter;
+        ap_optim_exitflag(idx_while_loop{:}) = ap_optim_exitflag_iter;
 
         % generate aperiodic with the estimated parameters across the whole
         % frequency range 

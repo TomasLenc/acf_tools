@@ -1,4 +1,4 @@
-function theta_opt = fit_aperiodic(x, y, varargin)
+function [theta_opt, exitflag] = fit_aperiodic(x, y, varargin)
 % Fit aperiodic 1/f component to data. 
 % 
 % 
@@ -29,6 +29,8 @@ addParameter(parser, 'fit_knee', false)
 addParameter(parser, 'method', 'fminunc')
 addParameter(parser, 'init', [])
 addParameter(parser, 'robust', false)
+addParameter(parser, 'verbose', 0)
+addParameter(parser, 'max_iter', 5000)
 
 parse(parser, varargin{:})
 
@@ -36,6 +38,8 @@ fit_knee = parser.Results.fit_knee;
 method = parser.Results.method; 
 theta_init = parser.Results.init; 
 robust = parser.Results.robust; 
+verbose = parser.Results.verbose; 
+max_iter = parser.Results.max_iter; 
           
 % check input shapes 
 if ~all(size(x) == size(y))
@@ -52,6 +56,14 @@ if ~isrow(x) & ~iscolumn(x)
 end
 if ~isrow(y) & ~iscolumn(y)
     error('y must be a column or row vector (got matrix instead)')
+end
+
+if verbose == 0
+    display_opt = 'off';
+elseif verbose == 1
+    display_opt = 'notify';
+elseif verbose > 1
+    display_opt = 'final';
 end
 
 % guess params for initialization
@@ -71,8 +83,8 @@ end
 if strcmp(method, 'lsq')
     
     options = optimoptions('lsqnonlin', ...
-                           'MaxFunctionEvaluations', 5000, ...
-                           'Display', 'off'); 
+                           'MaxFunctionEvaluations', max_iter, ...
+                           'Display', display_opt); 
     % first fit 
     if fit_knee
         lsq_fun = @(theta) ...
@@ -81,7 +93,9 @@ if strcmp(method, 'lsq')
         lsq_fun = @(theta) ...
             (theta(1) - log10( x .^ theta(end))) - y;
     end
-    theta_opt = lsqnonlin(lsq_fun, theta_init, [], [], options); 
+    [theta_opt, ~, exitflag, output] = lsqnonlin(...
+                            lsq_fun, theta_init, [], [], options...
+                            ); 
     
     % if robust fit
     if robust
@@ -102,17 +116,22 @@ if strcmp(method, 'lsq')
             lsq_fun = @(theta) ...
                 (theta(1) - log10( x_masked .^ theta(end))) - y_masked;
         end
-        theta_opt = lsqnonlin(lsq_fun, theta_opt, [], [], options); 
+        [theta_opt, ~, exitflag, output] = lsqnonlin(...
+                                lsq_fun, theta_opt, [], [], options...
+                                ); 
     end
     
 elseif strcmp(method, 'fminunc')
     
     options = optimoptions('fminunc', ...
-                           'MaxFunctionEvaluations', 5000, ...
-                           'Display', 'off'); 
+                           'MaxFunctionEvaluations', max_iter, ...
+                           'Display', display_opt); 
     try
-        theta_opt = fminunc(@(theta) sum((y - aperiodic(theta, x)).^2), ...
-                            theta_init, options); 
+        [theta_opt, ~, exitflag, output] = fminunc(...
+                            @(theta) sum((y - aperiodic(theta, x)).^2), ...
+                            theta_init, ...
+                            options...
+                            ); 
         % if robust fit
         if robust
             % flatten specrum based on initial fit 
@@ -126,7 +145,7 @@ elseif strcmp(method, 'fminunc')
             y_masked = y(mask); 
             % fit again, using the raw first fit as initial parameters
             fun = @(theta) sum((y_masked - aperiodic(theta, x_masked)).^2); 
-            theta_opt = fminunc(fun, theta_opt, options); 
+            [theta_opt, ~, exitflag, output] = fminunc(fun, theta_opt, options); 
         end
         
     catch ME
@@ -142,7 +161,11 @@ else
     error('method "%s" not implemented', method)
 end
 
-
+if exitflag == 0
+    warning('aperiodic fit didnt converge...')
+elseif exitflag < 0
+    warning('problem with optimalization method...please inspect!')
+end
 
 
 
