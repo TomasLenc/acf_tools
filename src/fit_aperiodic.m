@@ -154,7 +154,7 @@ elseif strcmp(method, 'fminunc')
             warning('Seems like objective function is undefined at initial point. This can be because you are trying to fit clean signal without any noise?')
             theta_opt = zeros(size(theta_init)); 
         end
-        
+        exitflag = 999;
     end
     
 else
