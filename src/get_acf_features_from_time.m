@@ -1,4 +1,4 @@
-function feat = get_acf_features2(x, fs, lags_meter_rel, lags_meter_unrel, varargin)
+function feat = get_acf_features_from_time(x, fs, lags_meter_rel, lags_meter_unrel)
 % Calculate prominence of meter-related lags from time-domain input. This is an
 % alternative to get_acf_features() function that requires pre-calculating the
 % whole autocorrelatino function. The problem is that we can't get normalized
@@ -6,6 +6,23 @@ function feat = get_acf_features2(x, fs, lags_meter_rel, lags_meter_unrel, varar
 % that we're only interested in the value of autocorrelation at a few apriori
 % specified lags, we don't need the whole function and can simply calculate
 % pearson correlation with time-shifted versions of the input signal. 
+% 
+% Parameters
+% ----------
+% x : array_like, shape=[..., time]
+%     Input x with time as the last dimension. 
+% fs : int
+%     Sampling rate. 
+% lags_meter_rel : array_like
+%     1-D array of time lags that are meter related. 
+% lags_meter_unrel : array_like
+%     1-D array of time lags that are meter unrelated. 
+%
+% Returns
+% -------
+% feat : struct
+%     Structure with calculated features. 
+%     
 
 shape = size(x); 
 

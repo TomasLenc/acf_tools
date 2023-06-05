@@ -1,5 +1,9 @@
 function [theta_opt, exitflag] = fit_aperiodic(x, y, varargin)
-% Fit aperiodic 1/f component to data. 
+% Fit aperiodic 1/f component to data. The model is equivalent to the one
+% described in: 
+% T. Donoghue et al., “Parameterizing neural power spectra into periodic 
+%   and aperiodic components,” Nature Neuroscience, vol. 23, no. 12,
+%   pp. 1655–1665, 2020, doi: 10.1038/s41593-020-00744-x.
 % 
 % 
 % Parameters
@@ -8,19 +12,29 @@ function [theta_opt, exitflag] = fit_aperiodic(x, y, varargin)
 %     1-D array of frequencies (linear!). 
 % y : array_like
 %     1-D array of log-power. 
-% fit_knee : bool, default=false
+% fit_knee : bool, optional, default=false
 %     Whether to use the knee parameter when fitting 1/f. 
-% method : {'fminunc', 'lsq'}, default='fminunc'
+% method : {'fminunc', 'lsq'}, optional, default='fminunc'
 %     Which matlab fitting method implementation to use. 
-% init : array_like
+% robust : bool, optional, default=false
+%     If true, the 1/f estimate will be computed using a "robust fit" procedure
+%     described by Donoghue et al. 2020.
+% init : array_like, optional
 %     [offset, knee, exponent] vector of initialization parameters if fitting
 %     with knee, else [offset, exponent]
+% verbose : int {0, 1, 2}, optional, default=0
+%     Verbosity level for the optimization routine. The higher the number the
+%     more verbose the optimizer will be. We will keep it silent by default. 
+% max_iter : int, optional, default=5000
+%     Maximum number of iterations during parameter fitting. 
 %
 % Returns
 % -------
 % theta_opt : array_like
 %     Array of 1/f parametersestimated by optimizing least-squares cost. 
-%     
+% exitflag: int
+%     Integer code output from the optimizer, indicating whether there were any
+%     issues. 
 % 
 
 parser = inputParser; 

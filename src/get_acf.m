@@ -12,6 +12,9 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = .
 %     Whether to fit and remove the aperiodic component (1/f) from acf. 
 % fit_knee : bool, default=false
 %     Whether to use the knee parameter when fitting 1/f. 
+% robust : bool, optional, default=false
+%     If true, the 1/f estimate will be computed using a "robust fit" procedure
+%     described by Donoghue et al. 2020. 
 % min_freq : float, default=0.1
 %     The lowest frequency that will be considered when fitting 1/f. 
 % max_freq : float, default=fs/2
@@ -28,9 +31,14 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = .
 % normalize_x : bool, default=true
 %     Normalize time-domain input to mean 0 and SD 1 (i.e. zscore). 
 % normalize_acf_to_1 : bool, default=false
-%     Divide the resulting ACF by its maximum value. 
+%     Divide the resulting full ACF by its maximum value. 
 % normalize_acf_z : bool, default=false
-%     Normalize the restulting ACF to mean 0 and SD 1 (i.e. zscore). 
+%     Normalize the restulting full ACF to mean 0 and SD 1 (i.e. zscore). 
+% verbose : int {0, 1, 2}, optional, default=0
+%     Verbosity level for the 1/f parameter fitting routine. The higher the 
+%     number the more verbose the optimizer will be. 
+% max_iter : int, optional, default=5000
+%     Maximum number of iterations during 1/f parameter fitting. 
 % 
 % Returns 
 % -------

@@ -1,4 +1,24 @@
 function feat = get_fft_features(mX, freq, freq_meter_rel, freq_meter_unrel)
+% Calculate SNR as zscore across harmonics. 
+% 
+% Parameters
+% ----------
+% mX : array_like, shape=[..., frequency]
+%     Raw (not noise-subtracted!!!) magnitude spectra with frequency as the 
+%     last dimension. 
+% freq : array_like
+%     Frequencies for the FFT. 
+% freq_meter_rel : array_like
+%     1-D array of frequencies (in Hz) that are meter related. 
+% freq_meter_unrel : array_like
+%     1-D array of frequencies (in Hz) that are meter unrelated. 
+% 
+% Returns 
+% -------
+% feat : struct
+%     Structure with calculated features. 
+
+
 
 if ~isrow(freq)
     freq = freq';

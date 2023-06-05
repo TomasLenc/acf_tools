@@ -7,7 +7,7 @@ function feat = get_acf_features(acf, lags, ...
 % ----------
 % acf : array_like
 %     Time lags must be last dimension. 
-% lags_time : array_like
+% lags : array_like
 %     1-D array of time lags in seconds
 % lags_meter_rel : array_like
 %     1-D array of time lags that are meter related. 
