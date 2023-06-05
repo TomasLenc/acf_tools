@@ -1,12 +1,12 @@
-function lags = get_lag_harmonics(lag, max_lag, varargin)
+function lags = get_lag_harmonics(lag_bases, max_lag, varargin)
 % This function returns all higher "harmonics" (i.e. multiples") of a lag, up
 % to the requested max_lag. Also, it will make sure that all multiples of any
 % lag pass in the array lag_harm_to_exclude will not be included. 
 % 
 % Parameters
 % ----------
-% lag : float
-%     Lag to get harmonics from.
+% lag_bases : array of floats
+%     Lag(s) to get harmonics from.
 % max_lag : float
 %     Value up to which to get harmonics.
 % lag_harm_to_exclude : array of floats
@@ -26,17 +26,23 @@ addParameter(parser, 'lag_harm_to_exclude', []);
 
 parse(parser, varargin{:}); 
 
-lag_harm_to_exclude = parser.Results.lag_harm_to_exclude; 
+lag_bases_to_exclude = parser.Results.lag_harm_to_exclude; 
 
 
-lags = [lag : lag : max_lag]; 
+% generate all nonoveralping multiples of the requested lags
+lags = []; 
+for i_lag=1:length(lag_bases)
+    lags = [lags, lag_bases(i_lag) : lag_bases(i_lag) : max_lag]; 
+end
+lags = uniquetol(lags, 1e-8); 
 
+% remove lags overapping with multiples of lag_bases_to_exclude
 mask_to_rm = zeros(1, length(lags), 'like', false); 
 
-for i_excl=1:length(lag_harm_to_exclude)
+for i_excl=1:length(lag_bases_to_exclude)
     
     lag_to_exclude_harm = [...
-        lag_harm_to_exclude(i_excl) : lag_harm_to_exclude(i_excl) : max_lag...
+        lag_bases_to_exclude(i_excl) : lag_bases_to_exclude(i_excl) : max_lag...
         ]; 
         
     for li=1:length(lags)
@@ -50,3 +56,4 @@ for i_excl=1:length(lag_harm_to_exclude)
 end
 
 lags = lags(~mask_to_rm); 
+
