@@ -71,6 +71,79 @@ function test_acf_multidim(test_case)
 end
 
 
+
+
+function test_acf_f0_ignore(test_case)
+
+%     fs = 100; 
+%     trial_dur = 60; 
+%     noise = pinknoise(fs * trial_dur)'; 
+%     noise = zscore(noise); 
+%     
+%     p0 = 0.8; 
+%     s = zeros(size(noise)); 
+%     event = ones(1, round(0.2 * fs)); 
+%     onsets = [p0 : p0 : trial_dur-p0];
+%     for i=1:length(onsets)
+%         idx = round(onsets(i) * fs); 
+%         s(idx+1 : idx+length(event)) = event; 
+%     end
+%     x = s + noise;
+    
+    load('test_acf_f0_ignore_data.mat'); 
+    
+    % wihtout 1/f subtraction 
+    [acf_raw, lags, ap, mX, freq, ap_par] = get_acf(...
+                                       x, fs, ...
+                                       'rm_ap', false ...
+                                       );     
+                                   
+    % with 1/f subtraction but keeping all frequencies when calculating ACF
+    [acf_subtr, lags, ap, mX, freq, ap_par] = get_acf(...
+                                       x, fs, ...
+                                       'rm_ap', true, ...
+                                       'f0_to_ignore', 1/p0, ...
+                                       'only_use_f0_harmonics', false ...
+                                       ); 
+
+    % with 1/f subtraction but only keeping f0 harmonics when calculating ACF
+    [acf_subtr_onlyF0, lags, ap, mX, freq, ap_par] = get_acf(...
+                                       x, fs, ...
+                                       'rm_ap', true, ...
+                                       'f0_to_ignore', 1/p0, ...
+                                       'only_use_f0_harmonics', true ...
+                                       );                                   
+                                   
+    acf_raw = zscore(acf_raw); 
+    acf_subtr = zscore(acf_subtr); 
+    acf_subtr_onlyF0 = zscore(acf_subtr_onlyF0); 
+    
+    idx_half = floor(length(acf_raw) / 2); 
+    
+    slope_index_raw = ...
+        mean(acf_raw(1 : idx_half)) - mean(acf_raw(idx_half : end));
+    
+    slope_index_subtr = ...
+        mean(acf_raw(1 : idx_half)) - mean(acf_subtr(idx_half : end));
+    
+    slope_index_subtr_onlyF0 = ...
+        mean(acf_subtr_onlyF0(1 : idx_half)) - mean(acf_subtr_onlyF0(idx_half : end));
+    
+    assert(slope_index_raw > slope_index_subtr); 
+    assert(slope_index_subtr > slope_index_subtr_onlyF0); 
+    
+%     figure
+%     plot(acf_raw); 
+%     hold on 
+%     plot(acf_subtr); 
+%     plot(acf_subtr_onlyF0); 
+
+end
+
+
+
+
+
 function test_mX_multidim(test_case)
 
     fs = 100; 
