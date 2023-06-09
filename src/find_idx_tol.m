@@ -30,6 +30,9 @@ for i=1:length(to_find)
     if min_diff < tol
         c = c+1; 
         idx_all_tmp(c) = idx; 
+    else
+        warning('No value closer than %g to %g. Skipping!', ...
+                 tol, to_find(i)); 
     end
 end
 

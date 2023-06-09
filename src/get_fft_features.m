@@ -1,4 +1,4 @@
-function feat = get_fft_features(mX, freq, freq_meter_rel, freq_meter_unrel)
+function feat = get_fft_features(mX, freq, freq_meter_rel, freq_meter_unrel, varargin)
 % Calculate SNR as zscore across harmonics. 
 % 
 % Parameters
@@ -12,12 +12,22 @@ function feat = get_fft_features(mX, freq, freq_meter_rel, freq_meter_unrel)
 %     1-D array of frequencies (in Hz) that are meter related. 
 % freq_meter_unrel : array_like
 %     1-D array of frequencies (in Hz) that are meter unrelated. 
+% tol : float, optional, default=1e-8
+%     Tolarance for finding lags of interest in the array of lags. If there is
+%     no lag closer than `tol`, the requested lag will be ommitted. 
 % 
 % Returns 
 % -------
 % feat : struct
 %     Structure with calculated features. 
 
+parser = inputParser; 
+
+addParameter(parser, 'tol', 1e-3)
+
+parse(parser, varargin{:})
+
+tol = parser.Results.tol; 
 
 
 if ~isrow(freq)
@@ -30,8 +40,8 @@ if ~isrow(freq_meter_unrel)
     freq_meter_unrel = freq_meter_unrel';
 end
 
-idx_meter_rel = ensure_row(find_idx_tol(freq, freq_meter_rel)); 
-idx_meter_unrel = ensure_row(find_idx_tol(freq, freq_meter_unrel)); 
+idx_meter_rel = ensure_row(find_idx_tol(freq, freq_meter_rel, 'tol', tol)); 
+idx_meter_unrel = ensure_row(find_idx_tol(freq, freq_meter_unrel, 'tol', tol)); 
 
 index = cell(1, ndims(mX));
 index(:) = {':'};
