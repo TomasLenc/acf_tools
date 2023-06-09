@@ -30,8 +30,8 @@ if ~isrow(freq_meter_unrel)
     freq_meter_unrel = freq_meter_unrel';
 end
 
-idx_meter_rel = dsearchn(freq', freq_meter_rel')'; 
-idx_meter_unrel = dsearchn(freq', freq_meter_unrel')'; 
+idx_meter_rel = ensure_row(find_idx_tol(freq, freq_meter_rel)); 
+idx_meter_unrel = ensure_row(find_idx_tol(freq, freq_meter_unrel)); 
 
 index = cell(1, ndims(mX));
 index(:) = {':'};

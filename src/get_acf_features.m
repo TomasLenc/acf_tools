@@ -52,14 +52,16 @@ ratio_meter_rel_right = [];
 contrast_meter_rel = []; 
 
 % get indices for lags of interest
-lags_meter_rel_idx = dsearchn(lags', lags_meter_rel')'; 
-lags_meter_unrel_idx = dsearchn(lags', lags_meter_unrel')'; 
+lags_meter_rel_idx = ensure_row(find_idx_tol(lags, lags_meter_rel)); 
+lags_meter_unrel_idx = ensure_row(find_idx_tol(lags, lags_meter_unrel)); 
 
 if ~isempty(lags_meter_unrel_left)
-    lags_meter_unrel_left_idx = dsearchn(lags', lags_meter_unrel_left')'; 
+    lags_meter_unrel_left_idx = ensure_row(...
+        find_idx_tol(lags, lags_meter_unrel_left)); 
 end
 if ~isempty(lags_meter_unrel_right)
-    lags_meter_unrel_right_idx = dsearchn(lags', lags_meter_unrel_right')'; 
+    lags_meter_unrel_right_idx = ensure_row(...
+        find_idx_tol(lags, lags_meter_unrel_right)); 
 end
 
 % normalize acf between 0 and 1

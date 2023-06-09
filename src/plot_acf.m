@@ -90,11 +90,11 @@ opacity_lagz = parser.Results.opacity_lagz;
 
 %%
 if isrow(lags)
-    min_lag_idx = dsearchn(lags', min_lag);
-    max_lag_idx = dsearchn(lags', max_lag);
+    min_lag_idx = find_idx_tol(lags', min_lag);
+    max_lag_idx = find_idx_tol(lags', max_lag);
 else
-    min_lag_idx = dsearchn(lags, min_lag);
-    max_lag_idx = dsearchn(lags, max_lag);
+    min_lag_idx = find_idx_tol(lags, min_lag);
+    max_lag_idx = find_idx_tol(lags, max_lag);
 end
 y_lims = [min(floor(acf(min_lag_idx:max_lag_idx)*prec)/prec), ...
           max(ceil(acf(min_lag_idx:max_lag_idx)*prec)/prec)]; 
@@ -102,7 +102,7 @@ y_lims = [min(floor(acf(min_lag_idx:max_lag_idx)*prec)/prec), ...
 hold(ax, 'on');
 
 if ~isempty(lags_meter_rel)
-    lags_meter_rel_idx = dsearchn(lags', lags_meter_rel'); 
+    lags_meter_rel_idx = find_idx_tol(lags', lags_meter_rel'); 
     h = plot(ax, [lags(lags_meter_rel_idx); lags(lags_meter_rel_idx)], y_lims,...
             '-', 'linew', linew_lagz, 'color', col_meter_rel); 
     for i=1:length(h)
@@ -111,7 +111,7 @@ if ~isempty(lags_meter_rel)
 end
 
 if ~isempty(lags_meter_unrel)
-    lags_meter_unrel_idx = dsearchn(lags', lags_meter_unrel'); 
+    lags_meter_unrel_idx = find_idx_tol(lags', lags_meter_unrel'); 
     h = plot(ax, [lags(lags_meter_unrel_idx); lags(lags_meter_unrel_idx)], y_lims,...
             '-', 'linew', linew_lagz, 'color', col_meter_unrel);
     for i=1:length(h)
