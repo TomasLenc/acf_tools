@@ -12,9 +12,9 @@ function feat = get_fft_features(mX, freq, freq_meter_rel, freq_meter_unrel, var
 %     1-D array of frequencies (in Hz) that are meter related. 
 % freq_meter_unrel : array_like
 %     1-D array of frequencies (in Hz) that are meter unrelated. 
-% tol : float, optional, default=1e-8
-%     Tolarance for finding lags of interest in the array of lags. If there is
-%     no lag closer than `tol`, the requested lag will be ommitted. 
+% idx_find_tol : float, optional, default=0.1
+%     Tolarance for finding lags of interest in the array of frequencies. If 
+%     there is no frequency closer than `tol`, a warning will be issued. 
 % 
 % Returns 
 % -------
@@ -23,11 +23,11 @@ function feat = get_fft_features(mX, freq, freq_meter_rel, freq_meter_unrel, var
 
 parser = inputParser; 
 
-addParameter(parser, 'tol', 1e-3)
+addParameter(parser, 'idx_find_tol', 0.1)
 
 parse(parser, varargin{:})
 
-tol = parser.Results.tol; 
+idx_find_tol = parser.Results.idx_find_tol; 
 
 
 if ~isrow(freq)
@@ -40,8 +40,10 @@ if ~isrow(freq_meter_unrel)
     freq_meter_unrel = freq_meter_unrel';
 end
 
-idx_meter_rel = ensure_row(find_idx_tol(freq, freq_meter_rel, 'tol', tol)); 
-idx_meter_unrel = ensure_row(find_idx_tol(freq, freq_meter_unrel, 'tol', tol)); 
+idx_meter_rel = ensure_row(find_idx_tol(freq, freq_meter_rel, ...
+                                        'tol_to_warn', idx_find_tol)); 
+idx_meter_unrel = ensure_row(find_idx_tol(freq, freq_meter_unrel, ...
+                                        'tol_to_warn', idx_find_tol)); 
 
 index = cell(1, ndims(mX));
 index(:) = {':'};

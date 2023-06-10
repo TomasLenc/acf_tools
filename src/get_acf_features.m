@@ -15,9 +15,9 @@ function feat = get_acf_features(acf, lags, ...
 %     1-D array of time lags that are meter unrelated. 
 % normalize_acf : bool, default=true
 %     Whether to normalize the acf between 0 and 1 before calculating features.      
-% tol : float, optional, default=1e-8
+% idx_find_tol : float, optional, default=0.1
 %     Tolarance for finding lags of interest in the array of lags. If there is
-%     no lag closer than `tol`, the requested lag will be ommitted. 
+%     no lag closer than `tol`, a warning will be issued. 
 %
 % Returns
 % -------
@@ -32,12 +32,12 @@ function feat = get_acf_features(acf, lags, ...
 parser = inputParser; 
 
 addParameter(parser, 'normalize_acf_vals', false)
-addParameter(parser, 'tol', 1e-4)
+addParameter(parser, 'idx_find_tol', 0.1)
 
 parse(parser, varargin{:})
 
 normalize_acf_vals = parser.Results.normalize_acf_vals; 
-tol = parser.Results.tol; 
+idx_find_tol = parser.Results.idx_find_tol; 
 
 % allocate
 z_meter_rel = []; 
@@ -46,9 +46,9 @@ contrast_meter_rel = [];
 
 % get indices for lags of interest
 lags_meter_rel_idx = ensure_row(...
-    find_idx_tol(lags, lags_meter_rel, 'tol', tol)); 
+    find_idx_tol(lags, lags_meter_rel, 'tol_to_warn', idx_find_tol)); 
 lags_meter_unrel_idx = ensure_row(...
-    find_idx_tol(lags, lags_meter_unrel, 'tol', tol)); 
+    find_idx_tol(lags, lags_meter_unrel, 'tol_to_warn', idx_find_tol)); 
 
 % normalize acf between 0 and 1
 if normalize_acf_vals
