@@ -7,11 +7,15 @@ function test_find_idx_tol(test_case)
     
     arr = [0.00001, 1, 1.999, 2.000001, 3, 4, 5, 6.00001, 10]; 
     
-    idx = find_idx_tol(arr, [2, 4, 5.000001, 8]);
-    assert(isequal(idx, [6]));
-    
-    idx = find_idx_tol(arr,  [2, 4, 5.000001, 8], 'tol', 1e-3);
+    idx = find_idx_tol(arr, [2, 4, 5.000001]);
     assert(isequal(idx, [4, 6, 7]));
+    
+    verifyWarning(test_case, ...
+        @() find_idx_tol(arr, [8]),...
+        'find_idx_tol:elementTooFar');
+    
+    verifyWarningFree(test_case, ...
+        @() find_idx_tol(arr, [8], 'tol_to_warn', 2));
     
 end
 
@@ -20,21 +24,12 @@ function test_find_idx_tol_transposed(test_case)
     
     arr = [0.00001, 1, 1.999, 2.000001, 3, 4, 5, 6.00001, 10]; 
     
-    idx = find_idx_tol(arr,  [2, 4, 5.000001, 8]', 'tol', 1e-3);
-    assert(isequal(idx, [4, 6, 7]));
+    idx = find_idx_tol(arr,  [2, 4, 5.000001, 8]');
+    assert(isequal(idx, [4, 6, 7, 8]));
     
-    idx = find_idx_tol(arr', [2, 4, 5.000001, 8], 'tol', 1e-3);
-    assert(isequal(idx, [4, 6, 7]));
+    idx = find_idx_tol(arr', [2, 4, 5.000001, 8]);
+    assert(isequal(idx, [4, 6, 7, 8]));
 
-end
-
-
-function test_find_idx_tol_nothing_found(test_case)
-
-    verifyError(test_case, ...
-        @() find_idx_tol([1,2,3], [5]),...
-        'find_idx_tol:NoIdxFound');
-    
 end
 
 
