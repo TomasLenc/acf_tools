@@ -55,6 +55,16 @@ robust = parser.Results.robust;
 verbose = parser.Results.verbose; 
 max_iter = parser.Results.max_iter; 
           
+% check input types
+if ~isa(x, 'double') 
+    error('fit_aperiodic:inputNotDouble', ...
+        'x must be double float (got %s instead)', class(x)); 
+end
+if ~isa(y, 'double') 
+    error('fit_aperiodic:inputNotDouble', ...
+        'y must be double float (got %s instead)', class(y)); 
+end
+
 % check input shapes 
 if ~all(size(x) == size(y))
     error('x and y must have the same shape')
@@ -167,6 +177,8 @@ elseif strcmp(method, 'fminunc')
         if strcmp(ME.identifier, 'optim:fminusub:UsrObjUndefAtX0')
             warning('Seems like objective function is undefined at initial point. This can be because you are trying to fit clean signal without any noise?')
             theta_opt = zeros(size(theta_init)); 
+        else
+            rethrow(ME);
         end
         exitflag = 999;
     end
