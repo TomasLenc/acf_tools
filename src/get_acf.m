@@ -156,6 +156,17 @@ lags = [0 : hN-1] / fs;
 
 if fit_ap
     
+    % check if DC is zero - warn the user 
+    index = cell(1, ndims(x));
+    index(:) = {':'};
+    index{end} = 1;
+    if any(mX(index{:}) < 1e4*eps(min(mX(:)))) && ap_fit_flims(1) <= 0 
+        warning(sprintf([...
+            'The magnitude at 0 Hz (DC) = 0. \n', ...
+            'This will be a problem for 1/f fitting. \n', ...
+            'Perhaps set the fitting range to start higher than 0?'])); 
+    end
+    
     % find frequencies which will be considered for the 1/f fit
     min_freq_idx = dsearchn(freq, ap_fit_flims(1)); 
     max_freq_idx = dsearchn(freq, ap_fit_flims(2)); 
