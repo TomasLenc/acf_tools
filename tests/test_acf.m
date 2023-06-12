@@ -203,6 +203,15 @@ function test_acf_plot(test_case)
 end
 
 
+function test_single_input_ap_fit_error(test_case)
+
+    fs = 128; 
+    x = single(randn(1, fs * 22)); 
+                                                          
+    verifyError(test_case, ...
+        @() get_acf(x, fs, 'rm_ap', true),...
+        'fit_aperiodic:inputNotDouble');
+end
 
 
 
