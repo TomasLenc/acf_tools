@@ -504,7 +504,7 @@ if plot_diagnostic
     freq_all = [0 : N-1] / N * fs;
     freq_to_keep_idx = [freq_to_ignore_idx; N - freq_to_ignore_idx + 2]; 
 
-    pnl(2, 2).pack('v', 3);
+    pnl(2, 2).pack('v', 4);
 
     ax = pnl(2, 2, 1).select(); 
     plot_fft(freq_all, abs(X_to_plot), ...
@@ -541,6 +541,24 @@ if plot_diagnostic
         ax.YAxis.Visible = 'off';
 
     end
+    
+    if exist('X_norm_flims', 'var')
+        ax = pnl(2, 2, 4).select(); 
+        plot_fft(freq_all, ...
+             abs(ensure_row(squeeze(X_norm_flims(idx_to_plot{:})))), ...
+             'frex_meter_rel', freq_all(freq_to_keep_idx), ...
+             'ax', ax, ...
+             'linew', 0.2); 
+        ax.XAxis.Visible = 'on'; 
+        ax.XLim = [0, fs];
+        ax.XTick = [0, fs]; 
+        ax.XTickLabel = ax.XTick;
+        ax.TickLength = [0, 0]; 
+        ax.YAxis.Visible = 'off';
+
+    end
+    
+    
 
     pnl(2, 1).xlabel('frequency');
     pnl(2, 2).xlabel('frequency');
