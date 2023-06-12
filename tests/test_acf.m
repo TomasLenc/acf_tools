@@ -214,6 +214,81 @@ function test_single_input_ap_fit_error(test_case)
 end
 
 
+function test_ap_flims(test_case)
+
+    % create 1/f signal 
+    fs = 128; 
+    N = fs * 100; 
+    hN = floor(N/2)+1; 
+    x = get_colored_noise(N, fs, -1); 
+    x = zscore(x); 
+    
+    % add power at high frequencies 
+    freq = [0 : hN-1] / N * fs; 
+    idx = [dsearchn(freq', 30) : dsearchn(freq', fs/2)];
+    X = fft(x); 
+    X(idx) = X(idx) * 3; 
+    X_new = [X(1:hN), flip(X(2:hN-1))];
+    x = real(ifft(X_new));
+                                                          
+    [acf, lags, ap1, mX, freq] = get_acf(x, fs, 'rm_ap', true, ...
+                                         'ap_fit_flims', [0.01, fs/2]);  
+                                     
+    [acf, lags, ap2, mX, freq] = get_acf(x, fs, 'rm_ap', true, ...
+                                         'ap_fit_flims', [0.01, 29]);  
+    
+%     figure
+%     plot(freq, mX); 
+%     hold on 
+%     plot(freq, ap1, ':', 'linew', 2); 
+%     plot(freq, ap2, ':', 'linew', 2); 
+%     
+    % taking into the account the higher frequencies results in a flatter 1/f
+    % estimate
+    assert(all(ap1(2:10) < ap2(2:10))); 
+    
+end
+
+
+function test_acf_flims(test_case)
+
+    % create 1/f signal 
+    fs = 200; 
+    N = fs * 100; 
+    hN = floor(N/2)+1; 
+    x = get_colored_noise(N, fs, -1); 
+    x = zscore(x); 
+    
+    % add power at a frequency
+    t = [0 : N-1] / fs; 
+    s = cos(2 * pi * t * 10); 
+    x = x + 2*s; 
+                                                          
+    [acf1, lags] = get_acf(x, fs, 'rm_ap', true, ...
+                                         'acf_flims', [0, 10-fs/N]);  
+                                     
+    [acf2, lags] = get_acf(x, fs, 'rm_ap', true, ...
+                                     'acf_flims', [0, 10]);  
+    
+    [acf3, lags] = get_acf(x, fs, 'rm_ap', true, ...
+                                     'acf_flims', [0, fs/2]);  
+
+    [acf4, lags] = get_acf(x, fs, 'rm_ap', true);  
+
+%     figure
+%     plot(lags, acf1); 
+%     hold on 
+%     plot(lags, acf2); 
+%     plot(lags, acf3); 
+%     xlim([0, 2]); 
+    
+    assert(max(abs(acf1 - acf2)) > 1e4 * eps * min(abs([acf1 - acf2]))); 
+    assert(max(abs(acf3 - acf4)) <= 1e4 * eps * min(abs([acf3 - acf4]))); 
+    
+    
+end
+
+
 
 
 
