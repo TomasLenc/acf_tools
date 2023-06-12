@@ -85,6 +85,7 @@ addParameter(parser, 'max_freq', fs/2)
 addParameter(parser, 'f0_to_ignore', [])
 addParameter(parser, 'only_use_f0_harmonics', true)
 addParameter(parser, 'bins', [2, 5])
+addParameter(parser, 'plot_diagnostic', false)
 
 parse(parser, varargin{:})
 
@@ -104,6 +105,7 @@ max_freq            = parser.Results.max_freq;
 f0_to_ignore        = parser.Results.f0_to_ignore; 
 only_use_f0_harmonics = parser.Results.only_use_f0_harmonics; 
 bins                = parser.Results.bins; 
+plot_diagnostic     = parser.Results.plot_diagnostic; 
 
 
 if isrow(f0_to_ignore)
@@ -314,6 +316,9 @@ if rm_ap
     % estimated 1/f noise magnitude at that frequency. 
     X_norm(~mask_dont_touch) = X(~mask_dont_touch) - X_ap_vecs(~mask_dont_touch); 
         
+    % retain this if diagnostic plots are requested
+    X_norm_all_frex = X_norm; 
+    
     % If we know which frequency bins the signal is going to project to, we can
     % simply ONLY RETAIN SIGNAL FREQUENCIES and set the complex numbers at all
     % other frequency bins to zero. 
@@ -382,6 +387,147 @@ mX(index{:}) = 0;
 if ~isrow(freq)
     freq = freq'; 
 end
+
+%% diagnostic plots 
+
+if plot_diagnostic
+
+    
+    idx_to_plot = repmat({1}, 1, ndims(x)-1); 
+    idx_to_plot{ndims(x)} = ':'; 
+
+    x_to_plot = ensure_row(squeeze(x(idx_to_plot{:}))); 
+    X_to_plot = ensure_row(squeeze(X(idx_to_plot{:}))); 
+    X_norm_to_plot = ensure_row(squeeze(X_norm_all_frex(idx_to_plot{:}))); 
+    mX_to_plot = ensure_row(squeeze(mX(idx_to_plot{:}))); 
+    mX_to_fit_plot = ensure_row(squeeze(mX_to_fit(idx_to_plot{:}))); 
+    ap_to_plot = ensure_row(squeeze(ap_linear(idx_to_plot{:}))); 
+    ap_whole_to_plot = ensure_row(squeeze(ap_whole_spect(idx_to_plot{:}))); 
+
+    col_freq_lims = [48, 201, 209]/255; 
+
+    f = figure('color', 'white', 'Position', [318 1299 1602 779]);
+
+    pnl = panel(f);
+
+    pnl.pack('v', [5, 95]);
+    pnl(2).pack('h', [30, 70]);
+    pnl(2, 1).pack('v', 2);
+
+    % pnl.select('all');
+
+    % ===========================================================================
+    % time-domain 
+    % ===========================================================================
+
+    ax = pnl(1).select();
+
+    plot_erp(x_to_plot, 'fs', fs, 'col', [0, 0, 0], 'linew', 1, 'ax', ax);
+
+    ax.XLim = [0, N/fs];
+    ax.YAxis.Visible = 'off';
+    ax.XAxis.Visible = 'on';
+    ax.TickLength = [0, 0]; 
+    pnl(1).xlabel('time');
+
+    % ===========================================================================
+    % magnitude spectrum for 1/f fitting
+    % ===========================================================================
+
+    % plot raw FFT
+    ax = pnl(2, 1, 1).select(); 
+    hold(ax, 'on');
+
+    plot_fft(freq, mX_to_plot, ...
+             'ax', ax, ...
+             'frex_meter_rel', freq_to_ignore, ...
+             'maxfreqlim', nyq, ...
+             'linew', 1); 
+    ax.YAxis.Visible = 'on';
+    ax.YLim = [0, max(mX_to_plot(freq_to_ignore_idx))];
+    ax.XAxis.Visible = 'on';
+    ax.XTick = [0, nyq];
+    
+    plot(ax, [min_freq, min_freq], [0, ax.YLim(2)], ':', ...
+        'linew', 3, 'color', col_freq_lims); 
+    plot(ax, [max_freq, max_freq], [0, ax.YLim(2)], ':', ...
+        'linew', 3, 'color', col_freq_lims); 
+
+    % plot 1/f component
+    ax = pnl(2, 1, 2).select(); 
+    hold(ax, 'on');
+
+    plot_fft(freq, mX_to_fit_plot, ...
+             'ax', ax, ...
+             'frex_meter_rel', freq_to_ignore, ...
+             'maxfreqlim', nyq, ...
+             'linew', 1); 
+    ax.YAxis.Visible = 'off';
+    ax.YLim = [0, max(mX_to_plot(freq_to_ignore_idx))];
+    ax.XAxis.Visible = 'on';
+    ax.XTick = [0, nyq];
+
+    plot(ax, freq, ap_to_plot, '--', 'color', 'k', 'linew', 2);    
+
+    plot(ax, [min_freq, min_freq], [0, ax.YLim(2)], ':', ...
+        'linew', 3, 'color', col_freq_lims); 
+    plot(ax, [max_freq, max_freq], [0, ax.YLim(2)], ':', ...
+        'linew', 3, 'color', col_freq_lims); 
+
+
+    % ===========================================================================
+    % full spectrum magnitude and phase 
+    % ===========================================================================
+
+    freq_all = [0 : N-1] / N * fs;
+    freq_to_keep_idx = [freq_to_ignore_idx; N - freq_to_ignore_idx + 2]; 
+
+    pnl(2, 2).pack('v', 3);
+
+    ax = pnl(2, 2, 1).select(); 
+    plot_fft(freq_all, abs(X_to_plot), ...
+             'frex_meter_rel', freq_all(freq_to_keep_idx), ...
+             'ax', ax, ...
+             'linew', 0.2); 
+    ax.XLim = [0, fs];
+    ax.YLim = [0, prctile(ap_whole_to_plot, 99.95)];
+    ax.YAxis.Visible = 'off';
+
+    hold(ax, 'on');
+    plot(ax, freq_all, ap_whole_to_plot, '--', 'color', 'k', 'linew', 2);    
+  
+    ax = pnl(2, 2, 2).select(); 
+    plot_fft(freq_all, abs(X_norm_to_plot), ...
+             'frex_meter_rel', freq_all(freq_to_keep_idx), ...
+             'ax', ax, ...
+             'linew', 0.2); 
+    ax.XLim = [0, fs];
+    ax.YAxis.Visible = 'off';
+
+    if exist('X_norm_frex_only', 'var')
+        ax = pnl(2, 2, 3).select(); 
+        plot_fft(freq_all, ...
+             abs(ensure_row(squeeze(X_norm_frex_only(idx_to_plot{:})))), ...
+             'frex_meter_rel', freq_all(freq_to_keep_idx), ...
+             'ax', ax, ...
+             'linew', 0.2); 
+        ax.XAxis.Visible = 'on'; 
+        ax.XLim = [0, fs];
+        ax.XTick = [0, fs]; 
+        ax.XTickLabel = ax.XTick;
+        ax.TickLength = [0, 0]; 
+        ax.YAxis.Visible = 'off';
+
+    end
+
+    pnl(2, 1).xlabel('frequency');
+    pnl(2, 2).xlabel('frequency');
+
+    pnl(2, 2).de.margin = [10, 3, 5, 3]; 
+    
+end
+
+
 
 
 
