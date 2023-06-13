@@ -351,42 +351,43 @@ if rm_ap
 
         X_norm = X_norm_frex_only; 
     end
-    
-    % zero out frequencies outside of requested range before computing the ACF
-    if acf_flims(1) == -inf
-        acf_flims(1) = min(freq); 
-    end
-    if acf_flims(2) == inf
-        acf_flims(2) = max(freq); 
-    end
-    flims_idx = dsearchn(ensure_col(freq), ensure_col(acf_flims)); 
-    flims_mask = zeros(1, hN); 
-    flims_mask(flims_idx(1) : flims_idx(2)) = 1; 
-    if mod(N, 2)
-        % odd 
-        flims_mask_all = [flims_mask, flip(flims_mask(2:end))]; 
-    else
-        % even
-        flims_mask_all = [flims_mask, flip(flims_mask(2:end-1))]; 
-    end
-    assert(length(flims_mask_all) == size(X_norm, ndims(x)))
-    index = repmat({':'}, 1, ndims(x)); 
-    index{end} = find(flims_mask_all); 
-
-    X_norm_flims = zeros(size(X_norm)); 
-    X_norm_flims(index{:}) = X_norm(index{:}); 
-    X_norm = X_norm_flims; 
-
-    % Convert 1/f-normalized spectrum back to time domain. 
-    if get_x_norm
-        x_norm = real(ifft(X_norm, [], ndims(x))); 
-    end
-    
+        
 else
     
     % without 1/f normalization
     X_norm = fft(x, [], ndims(x)) / N * 2; 
         
+end
+
+% If requested, zero out frequencies outside of requested range before 
+% computing the ACF
+if acf_flims(1) == -inf
+    acf_flims(1) = min(freq); 
+end
+if acf_flims(2) == inf
+    acf_flims(2) = max(freq); 
+end
+flims_idx = dsearchn(ensure_col(freq), ensure_col(acf_flims)); 
+flims_mask = zeros(1, hN); 
+flims_mask(flims_idx(1) : flims_idx(2)) = 1; 
+if mod(N, 2)
+    % odd 
+    flims_mask_all = [flims_mask, flip(flims_mask(2:end))]; 
+else
+    % even
+    flims_mask_all = [flims_mask, flip(flims_mask(2:end-1))]; 
+end
+assert(length(flims_mask_all) == size(X_norm, ndims(x)))
+index = repmat({':'}, 1, ndims(x)); 
+index{end} = find(flims_mask_all); 
+
+X_norm_flims = zeros(size(X_norm)); 
+X_norm_flims(index{:}) = X_norm(index{:}); 
+X_norm = X_norm_flims; 
+
+% Convert 1/f-normalized spectrum back to time domain. 
+if get_x_norm
+    x_norm = real(ifft(X_norm, [], ndims(x))); 
 end
 
 % get the autocorrelation frunciton from the complex spectrum 
