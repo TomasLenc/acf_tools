@@ -24,11 +24,9 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = .
 % bins : [int, int], default=[2, 5]
 %     Minimum and maximum frequency bin (on both sides) used to ignore 
 %     frequencies during 1/f fitting.
-% min_freq : float, default=0.1
-%     The lowest frequency that will be considered when fitting 1/f. 
-% max_freq : float, default=fs/2
-%     The highest frequency that will be considered when fitting 1/f (default 
-%     is nyquist). 
+% ap_fit_flims : [float, float], default=[0.1, fs/2]
+%     The lowest and highest frequency that will be considered when fitting 
+%     the 1/f noies (default 0.1 Hz and nyquist). 
 % get_x_norm : bool, default=false
 %     Whether to also return 1/f-subtracted signal in the time domain. 
 % fit_knee : bool, default=false
@@ -80,8 +78,8 @@ addParameter(parser, 'fit_knee', false)
 addParameter(parser, 'robust', false)
 addParameter(parser, 'verbose', 0)
 addParameter(parser, 'max_iter', 5000)
-addParameter(parser, 'min_freq', 0.1)
-addParameter(parser, 'max_freq', fs/2)
+addParameter(parser, 'ap_fit_flims', [0.1, fs/2])
+addParameter(parser, 'acf_flims', [0, Inf])
 addParameter(parser, 'f0_to_ignore', [])
 addParameter(parser, 'only_use_f0_harmonics', true)
 addParameter(parser, 'bins', [2, 5])
@@ -100,8 +98,8 @@ fit_knee            = parser.Results.fit_knee;
 robust              = parser.Results.robust; 
 verbose             = parser.Results.verbose; 
 max_iter            = parser.Results.max_iter; 
-min_freq            = parser.Results.min_freq; 
-max_freq            = parser.Results.max_freq; 
+ap_fit_flims        = parser.Results.ap_fit_flims; 
+acf_flims           = parser.Results.acf_flims; 
 f0_to_ignore        = parser.Results.f0_to_ignore; 
 only_use_f0_harmonics = parser.Results.only_use_f0_harmonics; 
 bins                = parser.Results.bins; 
@@ -158,9 +156,20 @@ lags = [0 : hN-1] / fs;
 
 if fit_ap
     
+    % check if DC is zero - warn the user 
+    index = cell(1, ndims(x));
+    index(:) = {':'};
+    index{end} = 1;
+    if any(mX(index{:}) < 1e4*eps(min(mX(:)))) && ap_fit_flims(1) <= 0 
+        warning(sprintf([...
+            'The magnitude at 0 Hz (DC) = 0. \n', ...
+            'This will be a problem for 1/f fitting. \n', ...
+            'Perhaps set the fitting range to start higher than 0?'])); 
+    end
+    
     % find frequencies which will be considered for the 1/f fit
-    min_freq_idx = dsearchn(freq, min_freq); 
-    max_freq_idx = dsearchn(freq, max_freq); 
+    min_freq_idx = dsearchn(freq, ap_fit_flims(1)); 
+    max_freq_idx = dsearchn(freq, ap_fit_flims(2)); 
     freq_to_fit = freq(min_freq_idx : max_freq_idx); 
     
     % ignore all harmonics of f0 up to nyquist frequency
@@ -334,21 +343,45 @@ if rm_ap
         X_norm = X_norm_frex_only; 
     end
     
+    % zero out frequencies outside of requested range before computing the ACF
+    if acf_flims(1) == -inf
+        acf_flims(1) = min(freq); 
+    end
+    if acf_flims(2) == inf
+        acf_flims(2) = max(freq); 
+    end
+    flims_idx = dsearchn(ensure_col(freq), ensure_col(acf_flims)); 
+    flims_mask = zeros(1, hN); 
+    flims_mask(flims_idx(1) : flims_idx(2)) = 1; 
+    if mod(N, 2)
+        % odd 
+        flims_mask_all = [flims_mask, flip(flims_mask(2:end))]; 
+    else
+        % even
+        flims_mask_all = [flims_mask, flip(flims_mask(2:end-1))]; 
+    end
+    assert(length(flims_mask_all) == size(X_norm, ndims(x)))
+    index = repmat({':'}, 1, ndims(x)); 
+    index{end} = find(flims_mask_all); 
+
+    X_norm_flims = zeros(size(X_norm)); 
+    X_norm_flims(index{:}) = X_norm(index{:}); 
+    X_norm = X_norm_flims; 
+
     % Convert 1/f-normalized spectrum back to time domain. 
     if get_x_norm
         x_norm = real(ifft(X_norm, [], ndims(x))); 
     end
     
-    % get the autocorrelation frunciton from the normalized spectrum 
-    acf = real(ifft(X_norm .* conj(X_norm), [], ndims(x))); 
-
 else
     
-    % get raw autocorrelation (without 1/f normalization)
-    X = fft(x, [], ndims(x)) / N * 2; 
-    acf = (real(ifft(X .* conj(X), [], ndims(x)))); 
+    % without 1/f normalization
+    X_norm = fft(x, [], ndims(x)) / N * 2; 
         
 end
+
+% get the autocorrelation frunciton from the complex spectrum 
+acf = real(ifft(X_norm .* conj(X_norm), [], ndims(x))); 
 
 % scale ACF to +-1
 if normalize_acf_to_1
@@ -448,9 +481,9 @@ if plot_diagnostic
     ax.XAxis.Visible = 'on';
     ax.XTick = [0, nyq];
     
-    plot(ax, [min_freq, min_freq], [0, ax.YLim(2)], ':', ...
+    plot(ax, [ap_fit_flims(1), ap_fit_flims(1)], [0, ax.YLim(2)], ':', ...
         'linew', 3, 'color', col_freq_lims); 
-    plot(ax, [max_freq, max_freq], [0, ax.YLim(2)], ':', ...
+    plot(ax, [ap_fit_flims(2), ap_fit_flims(2)], [0, ax.YLim(2)], ':', ...
         'linew', 3, 'color', col_freq_lims); 
 
     % plot 1/f component
@@ -469,9 +502,9 @@ if plot_diagnostic
 
     plot(ax, freq, ap_to_plot, '--', 'color', 'k', 'linew', 2);    
 
-    plot(ax, [min_freq, min_freq], [0, ax.YLim(2)], ':', ...
+    plot(ax, [ap_fit_flims(1), ap_fit_flims(1)], [0, ax.YLim(2)], ':', ...
         'linew', 3, 'color', col_freq_lims); 
-    plot(ax, [max_freq, max_freq], [0, ax.YLim(2)], ':', ...
+    plot(ax, [ap_fit_flims(2), ap_fit_flims(2)], [0, ax.YLim(2)], ':', ...
         'linew', 3, 'color', col_freq_lims); 
 
 
@@ -482,7 +515,7 @@ if plot_diagnostic
     freq_all = [0 : N-1] / N * fs;
     freq_to_keep_idx = [freq_to_ignore_idx; N - freq_to_ignore_idx + 2]; 
 
-    pnl(2, 2).pack('v', 3);
+    pnl(2, 2).pack('v', 4);
 
     ax = pnl(2, 2, 1).select(); 
     plot_fft(freq_all, abs(X_to_plot), ...
@@ -519,6 +552,24 @@ if plot_diagnostic
         ax.YAxis.Visible = 'off';
 
     end
+    
+    if exist('X_norm_flims', 'var')
+        ax = pnl(2, 2, 4).select(); 
+        plot_fft(freq_all, ...
+             abs(ensure_row(squeeze(X_norm_flims(idx_to_plot{:})))), ...
+             'frex_meter_rel', freq_all(freq_to_keep_idx), ...
+             'ax', ax, ...
+             'linew', 0.2); 
+        ax.XAxis.Visible = 'on'; 
+        ax.XLim = [0, fs];
+        ax.XTick = [0, fs]; 
+        ax.XTickLabel = ax.XTick;
+        ax.TickLength = [0, 0]; 
+        ax.YAxis.Visible = 'off';
+
+    end
+    
+    
 
     pnl(2, 1).xlabel('frequency');
     pnl(2, 2).xlabel('frequency');
