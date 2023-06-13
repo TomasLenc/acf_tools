@@ -27,6 +27,15 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = .
 % ap_fit_flims : [float, float], default=[0.1, fs/2]
 %     The lowest and highest frequency that will be considered when fitting 
 %     the 1/f noies (default 0.1 Hz and nyquist). 
+% acf_flims : [float, float], default=[0, fs]
+%     The lowest and highest frequency that will be used to calculate the ACF.
+%     All frequencies outside of this range will be zeroed out in the complex
+%     spectrum before calculating the ACF. (default 0.1 Hz and sampling rate). 
+% plot_diagnostic : bool, default=false
+%     If true, a diagnostic plot for debugging the 1/f normalization is plotted. 
+%     In case of multidimensional input `x`, only the first element is plotted.
+%     E.g. if the input has dimensions [subject x time], the only the data for
+%     the first subject are plotted in the diagnostic plot. 
 % get_x_norm : bool, default=false
 %     Whether to also return 1/f-subtracted signal in the time domain. 
 % fit_knee : bool, default=false
@@ -423,11 +432,15 @@ end
 
 %% diagnostic plots 
 
-if plot_diagnostic
-
-    
+if plot_diagnostic && rm_ap
+        
     idx_to_plot = repmat({1}, 1, ndims(x)-1); 
     idx_to_plot{ndims(x)} = ':'; 
+
+    if ~isrow(x) && ~iscolumn(x)
+        warning('Multidimensional input: diagnistic plot for x(%s)', ...
+            strjoin(cellfun(@(x)num2str(x), idx_to_plot, 'uni', false), ', '));  
+    end
 
     x_to_plot = ensure_row(squeeze(x(idx_to_plot{:}))); 
     X_to_plot = ensure_row(squeeze(X(idx_to_plot{:}))); 
@@ -576,6 +589,12 @@ if plot_diagnostic
 
     pnl(2, 2).de.margin = [10, 3, 5, 3]; 
     
+elseif plot_diagnostic && ~rm_ap
+
+    warning('get_acf:plotRequestWithoutRmAp', ...
+        ['You requested diagnostic plot but it only makes sense when `rm_ap`', ...
+        ' is set to true. I will not plot anything...']); 
+        
 end
 
 
