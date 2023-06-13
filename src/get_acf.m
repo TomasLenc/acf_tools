@@ -32,10 +32,10 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = .
 %     All frequencies outside of this range will be zeroed out in the complex
 %     spectrum before calculating the ACF. (default 0.1 Hz and sampling rate). 
 % plot_diagnostic : bool, default=false
-%     If true, a diagnostic plot for debugging the 1/f normalization is plotted. 
-%     In case of multidimensional input `x`, only the first element is plotted.
-%     E.g. if the input has dimensions [subject x time], the only the data for
-%     the first subject are plotted in the diagnostic plot. 
+%     If true, a diagnostic plot for debugging In case of multidimensional 
+%     input `x`, only the first element is plotted. E.g. if the input has 
+%     dimensions [subject x time], the only the data for the first subject 
+%     are plotted in the diagnostic plot. 
 % get_x_norm : bool, default=false
 %     Whether to also return 1/f-subtracted signal in the time domain. 
 % fit_knee : bool, default=false
@@ -146,8 +146,11 @@ ap_all = [];
 ap_linear = [];
 ap_par = []; 
 x_norm = []; 
+freq_to_ignore = [];
+freq_to_ignore_idx = []; 
 
 % get whole-trial FFT
+nyq = fs/2; 
 N = size(x, ndims(x)); 
 hN = floor(N / 2) + 1; 
 freq = [0 : hN-1]' / N * fs; 
@@ -182,7 +185,6 @@ if fit_ap
     freq_to_fit = freq(min_freq_idx : max_freq_idx); 
     
     % ignore all harmonics of f0 up to nyquist frequency
-    nyq = fs/2; 
     freq_to_ignore = [f0_to_ignore : f0_to_ignore : nyq]'; 
     freq_to_ignore_idx = dsearchn(freq, freq_to_ignore); 
 
@@ -279,6 +281,9 @@ end
 % get ACF
 % -------
 
+% get full complex spectra
+X = fft(x, [], ndims(x)) ./ N .* 2; 
+
 if rm_ap
 
     % If the first frequency bin is zero, the value of estimated aperiodic
@@ -308,8 +313,6 @@ if rm_ap
                          ap_for_norm, ...
                          flip(ap_for_norm(index{:}), ndims(x))...
                          ); 
-    % get full complex spectra
-    X = fft(x, [], ndims(x)) ./ N .* 2; 
         
     % Prepare vectors with same direction as X, and unit length (make sure we
     % don't divide by 0)
@@ -355,7 +358,7 @@ if rm_ap
 else
     
     % without 1/f normalization
-    X_norm = fft(x, [], ndims(x)) / N * 2; 
+    X_norm = X;
         
 end
 
@@ -368,7 +371,7 @@ if acf_flims(2) == inf
     acf_flims(2) = max(freq); 
 end
 flims_idx = dsearchn(ensure_col(freq), ensure_col(acf_flims)); 
-flims_mask = zeros(1, hN); 
+flims_mask = zeros(1, hN, 'logical'); 
 flims_mask(flims_idx(1) : flims_idx(2)) = 1; 
 if mod(N, 2)
     % odd 
@@ -433,7 +436,7 @@ end
 
 %% diagnostic plots 
 
-if plot_diagnostic && rm_ap
+if plot_diagnostic
         
     idx_to_plot = repmat({1}, 1, ndims(x)-1); 
     idx_to_plot{ndims(x)} = ':'; 
@@ -442,14 +445,6 @@ if plot_diagnostic && rm_ap
         warning('Multidimensional input: diagnistic plot for x(%s)', ...
             strjoin(cellfun(@(x)num2str(x), idx_to_plot, 'uni', false), ', '));  
     end
-
-    x_to_plot = ensure_row(squeeze(x(idx_to_plot{:}))); 
-    X_to_plot = ensure_row(squeeze(X(idx_to_plot{:}))); 
-    X_norm_to_plot = ensure_row(squeeze(X_norm_all_frex(idx_to_plot{:}))); 
-    mX_to_plot = ensure_row(squeeze(mX(idx_to_plot{:}))); 
-    mX_to_fit_plot = ensure_row(squeeze(mX_to_fit(idx_to_plot{:}))); 
-    ap_to_plot = ensure_row(squeeze(ap_linear(idx_to_plot{:}))); 
-    ap_whole_to_plot = ensure_row(squeeze(ap_whole_spect(idx_to_plot{:}))); 
 
     col_freq_lims = [48, 201, 209]/255; 
 
@@ -467,6 +462,8 @@ if plot_diagnostic && rm_ap
     % time-domain 
     % ===========================================================================
 
+    x_to_plot = ensure_row(squeeze(x(idx_to_plot{:}))); 
+
     ax = pnl(1).select();
 
     plot_erp(x_to_plot, 'fs', fs, 'col', [0, 0, 0], 'linew', 1, 'ax', ax);
@@ -482,6 +479,8 @@ if plot_diagnostic && rm_ap
     % ===========================================================================
 
     % plot raw FFT
+    mX_to_plot = ensure_row(squeeze(mX(idx_to_plot{:}))); 
+
     ax = pnl(2, 1, 1).select(); 
     hold(ax, 'on');
 
@@ -491,39 +490,53 @@ if plot_diagnostic && rm_ap
              'maxfreqlim', nyq, ...
              'linew', 1); 
     ax.YAxis.Visible = 'on';
-    ax.YLim = [0, max(mX_to_plot(freq_to_ignore_idx))];
     ax.XAxis.Visible = 'on';
     ax.XTick = [0, nyq];
+    if ~isempty(freq_to_ignore)
+        ax.YLim = [0, max(mX_to_plot(freq_to_ignore_idx))];
+    end
     
-    plot(ax, [ap_fit_flims(1), ap_fit_flims(1)], [0, ax.YLim(2)], ':', ...
-        'linew', 3, 'color', col_freq_lims); 
-    plot(ax, [ap_fit_flims(2), ap_fit_flims(2)], [0, ax.YLim(2)], ':', ...
-        'linew', 3, 'color', col_freq_lims); 
+    if rm_ap
+        
+        % overlay frequency limits used to fit 1/f 
+        plot(ax, [ap_fit_flims(1), ap_fit_flims(1)], [0, ax.YLim(2)], ':', ...
+            'linew', 3, 'color', col_freq_lims); 
+        plot(ax, [ap_fit_flims(2), ap_fit_flims(2)], [0, ax.YLim(2)], ':', ...
+            'linew', 3, 'color', col_freq_lims); 
+    
+        % plot spectrum used to fit 1/f component
+        mX_to_fit_plot = ensure_row(squeeze(mX_to_fit(idx_to_plot{:}))); 
 
-    % plot 1/f component
-    ax = pnl(2, 1, 2).select(); 
-    hold(ax, 'on');
+        ax = pnl(2, 1, 2).select(); 
+        hold(ax, 'on');
 
-    plot_fft(freq, mX_to_fit_plot, ...
-             'ax', ax, ...
-             'frex_meter_rel', freq_to_ignore, ...
-             'maxfreqlim', nyq, ...
-             'linew', 1); 
-    ax.YAxis.Visible = 'off';
-    ax.YLim = [0, max(mX_to_plot(freq_to_ignore_idx))];
-    ax.XAxis.Visible = 'on';
-    ax.XTick = [0, nyq];
+        plot_fft(freq, mX_to_fit_plot, ...
+                 'ax', ax, ...
+                 'frex_meter_rel', freq_to_ignore, ...
+                 'maxfreqlim', nyq, ...
+                 'linew', 1); 
+        ax.YAxis.Visible = 'off';
+        if ~isempty(freq_to_ignore)
+            ax.YLim = [0, max(mX_to_plot(freq_to_ignore_idx))];
+        end
+        ax.XAxis.Visible = 'on';
+        ax.XTick = [0, nyq];
 
-    plot(ax, freq, ap_to_plot, '--', 'color', 'k', 'linew', 2);    
+        % plot the 1/f estimate over the spectrum 
+        ap_to_plot = ensure_row(squeeze(ap_linear(idx_to_plot{:}))); 
 
-    plot(ax, [ap_fit_flims(1), ap_fit_flims(1)], [0, ax.YLim(2)], ':', ...
-        'linew', 3, 'color', col_freq_lims); 
-    plot(ax, [ap_fit_flims(2), ap_fit_flims(2)], [0, ax.YLim(2)], ':', ...
-        'linew', 3, 'color', col_freq_lims); 
+        plot(ax, freq, ap_to_plot, '--', 'color', 'k', 'linew', 2);    
+
+        plot(ax, [ap_fit_flims(1), ap_fit_flims(1)], [0, ax.YLim(2)], ':', ...
+            'linew', 3, 'color', col_freq_lims); 
+        plot(ax, [ap_fit_flims(2), ap_fit_flims(2)], [0, ax.YLim(2)], ':', ...
+            'linew', 3, 'color', col_freq_lims); 
+        
+    end
 
 
     % ===========================================================================
-    % full spectrum magnitude and phase 
+    % full spectrum 
     % ===========================================================================
 
     freq_all = [0 : N-1] / N * fs;
@@ -531,27 +544,38 @@ if plot_diagnostic && rm_ap
 
     pnl(2, 2).pack('v', 4);
 
+    X_to_plot = ensure_row(squeeze(X(idx_to_plot{:}))); 
+
     ax = pnl(2, 2, 1).select(); 
     plot_fft(freq_all, abs(X_to_plot), ...
              'frex_meter_rel', freq_all(freq_to_keep_idx), ...
              'ax', ax, ...
              'linew', 0.2); 
     ax.XLim = [0, fs];
-    ax.YLim = [0, prctile(ap_whole_to_plot, 99.95)];
     ax.YAxis.Visible = 'off';
 
-    hold(ax, 'on');
-    plot(ax, freq_all, ap_whole_to_plot, '--', 'color', 'k', 'linew', 2);    
-  
-    ax = pnl(2, 2, 2).select(); 
-    plot_fft(freq_all, abs(X_norm_to_plot), ...
-             'frex_meter_rel', freq_all(freq_to_keep_idx), ...
-             'ax', ax, ...
-             'linew', 0.2); 
-    ax.XLim = [0, fs];
-    ax.YAxis.Visible = 'off';
+    if rm_ap                
+        % add 1/f component to the plot
+        ap_whole_to_plot = ensure_row(squeeze(ap_whole_spect(idx_to_plot{:}))); 
+        
+        ax.YLim = [0, prctile(ap_whole_to_plot, 99.95)];
+        hold(ax, 'on');
+        plot(ax, freq_all, ap_whole_to_plot, '--', 'color', 'k', 'linew', 2);    
+    
+        % plot 1/f-normalized spectrum
+        X_norm_to_plot = ensure_row(squeeze(X_norm_all_frex(idx_to_plot{:}))); 
+        
+        ax = pnl(2, 2, 2).select(); 
+        plot_fft(freq_all, abs(X_norm_to_plot), ...
+                 'frex_meter_rel', freq_all(freq_to_keep_idx), ...
+                 'ax', ax, ...
+                 'linew', 0.2); 
+        ax.XLim = [0, fs];
+        ax.YAxis.Visible = 'off';
+    end
 
     if exist('X_norm_frex_only', 'var')
+        % plot full spectrum after only harmonics of f0 are retained 
         ax = pnl(2, 2, 3).select(); 
         plot_fft(freq_all, ...
              abs(ensure_row(squeeze(X_norm_frex_only(idx_to_plot{:})))), ...
@@ -568,9 +592,30 @@ if plot_diagnostic && rm_ap
     end
     
     if exist('X_norm_flims', 'var')
+        % plot full spectrum after only frequencies within the requested limits
+        % are retained 
+        mX_norm_flims_to_plot = ...
+                    abs(ensure_row(squeeze(X_norm_flims(idx_to_plot{:})))); 
         ax = pnl(2, 2, 4).select(); 
+        hold(ax, 'on');
+ 
+        clusts = bwconncomp(flims_mask_all); 
+        
+        for i_clust=1:length(clusts.PixelIdxList)
+            
+            fill(ax, ...
+                [freq_all(clusts.PixelIdxList{i_clust}(1)), ...
+                 freq_all(clusts.PixelIdxList{i_clust}(end)), ...
+                 freq_all(clusts.PixelIdxList{i_clust}(end)), ...
+                 freq_all(clusts.PixelIdxList{i_clust}(1)), ...
+                 ], ...
+                [min(mX_norm_flims_to_plot), min(mX_norm_flims_to_plot), ...
+                 max(mX_norm_flims_to_plot), max(mX_norm_flims_to_plot)], ...
+                [255, 187, 0] / 255, 'LineStyle', 'none', 'FaceAlpha', 0.1); 
+        end
+        
         plot_fft(freq_all, ...
-             abs(ensure_row(squeeze(X_norm_flims(idx_to_plot{:})))), ...
+             mX_norm_flims_to_plot, ...
              'frex_meter_rel', freq_all(freq_to_keep_idx), ...
              'ax', ax, ...
              'linew', 0.2); 
@@ -583,19 +628,11 @@ if plot_diagnostic && rm_ap
 
     end
     
-    
-
     pnl(2, 1).xlabel('frequency');
     pnl(2, 2).xlabel('frequency');
 
     pnl(2, 2).de.margin = [10, 3, 5, 3]; 
-    
-elseif plot_diagnostic && ~rm_ap
-
-    warning('get_acf:plotRequestWithoutRmAp', ...
-        ['You requested diagnostic plot but it only makes sense when `rm_ap`', ...
-        ' is set to true. I will not plot anything...']); 
-        
+            
 end
 
 
