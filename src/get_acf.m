@@ -472,6 +472,7 @@ if plot_diagnostic
     ax.YAxis.Visible = 'off';
     ax.XAxis.Visible = 'on';
     ax.TickLength = [0, 0]; 
+    ax.XTick = [ax.XTick(1), ax.XTick(end)]; 
     pnl(1).xlabel('time');
 
     % ===========================================================================
@@ -482,6 +483,7 @@ if plot_diagnostic
     mX_to_plot = ensure_row(squeeze(mX(idx_to_plot{:}))); 
 
     ax = pnl(2, 1, 1).select(); 
+    title(ax, 'raw mX (up to nyquist)'); 
     hold(ax, 'on');
 
     plot_fft(freq, mX_to_plot, ...
@@ -496,18 +498,26 @@ if plot_diagnostic
         ax.YLim = [0, max(mX_to_plot(freq_to_ignore_idx))];
     end
     
+    
     if rm_ap
+            
+        % plot the 1/f estimate over the spectrum 
+        ap_to_plot = ensure_row(squeeze(ap_linear(idx_to_plot{:}))); 
+        plot(ax, freq, ap_to_plot, '--', 'color', 'k', 'linew', 2);    
         
         % overlay frequency limits used to fit 1/f 
         plot(ax, [ap_fit_flims(1), ap_fit_flims(1)], [0, ax.YLim(2)], ':', ...
             'linew', 3, 'color', col_freq_lims); 
         plot(ax, [ap_fit_flims(2), ap_fit_flims(2)], [0, ax.YLim(2)], ':', ...
             'linew', 3, 'color', col_freq_lims); 
-    
+
+        %--------
+        
         % plot spectrum used to fit 1/f component
         mX_to_fit_plot = ensure_row(squeeze(mX_to_fit(idx_to_plot{:}))); 
 
         ax = pnl(2, 1, 2).select(); 
+        title(ax, 'mX to estimate 1/f (up to nyquist)'); 
         hold(ax, 'on');
 
         plot_fft(freq, mX_to_fit_plot, ...
@@ -524,9 +534,9 @@ if plot_diagnostic
 
         % plot the 1/f estimate over the spectrum 
         ap_to_plot = ensure_row(squeeze(ap_linear(idx_to_plot{:}))); 
-
         plot(ax, freq, ap_to_plot, '--', 'color', 'k', 'linew', 2);    
-
+        
+        % overlay frequency limits used to fit 1/f 
         plot(ax, [ap_fit_flims(1), ap_fit_flims(1)], [0, ax.YLim(2)], ':', ...
             'linew', 3, 'color', col_freq_lims); 
         plot(ax, [ap_fit_flims(2), ap_fit_flims(2)], [0, ax.YLim(2)], ':', ...
@@ -544,10 +554,11 @@ if plot_diagnostic
 
     pnl(2, 2).pack('v', 4);
 
-    X_to_plot = ensure_row(squeeze(X(idx_to_plot{:}))); 
+    mX_full_to_plot = ensure_row(abs(squeeze(X(idx_to_plot{:})))); 
 
     ax = pnl(2, 2, 1).select(); 
-    plot_fft(freq_all, abs(X_to_plot), ...
+    title(ax, 'mX (up to fs)'); 
+    plot_fft(freq_all, mX_full_to_plot, ...
              'frex_meter_rel', freq_all(freq_to_keep_idx), ...
              'ax', ax, ...
              'linew', 0.2); 
@@ -558,14 +569,20 @@ if plot_diagnostic
         % add 1/f component to the plot
         ap_whole_to_plot = ensure_row(squeeze(ap_whole_spect(idx_to_plot{:}))); 
         
-        ax.YLim = [0, prctile(ap_whole_to_plot, 99.95)];
+        ax.YLim = [0, max(mX_full_to_plot(freq_to_keep_idx))];
+        
         hold(ax, 'on');
         plot(ax, freq_all, ap_whole_to_plot, '--', 'color', 'k', 'linew', 2);    
-    
+        plot(ax, [ap_fit_flims(1), ap_fit_flims(1)], [0, ax.YLim(2)], ':', ...
+            'linew', 3, 'color', col_freq_lims); 
+        plot(ax, [ap_fit_flims(2), ap_fit_flims(2)], [0, ax.YLim(2)], ':', ...
+            'linew', 3, 'color', col_freq_lims); 
+        
         % plot 1/f-normalized spectrum
         X_norm_to_plot = ensure_row(squeeze(X_norm_all_frex(idx_to_plot{:}))); 
         
         ax = pnl(2, 2, 2).select(); 
+        title(ax, '1/f-normalized mX (up to fs)'); 
         plot_fft(freq_all, abs(X_norm_to_plot), ...
                  'frex_meter_rel', freq_all(freq_to_keep_idx), ...
                  'ax', ax, ...
@@ -577,6 +594,7 @@ if plot_diagnostic
     if exist('X_norm_frex_only', 'var')
         % plot full spectrum after only harmonics of f0 are retained 
         ax = pnl(2, 2, 3).select(); 
+        title(ax, '1/f-normalized mX, only f0 harmonics (up to fs)'); 
         plot_fft(freq_all, ...
              abs(ensure_row(squeeze(X_norm_frex_only(idx_to_plot{:})))), ...
              'frex_meter_rel', freq_all(freq_to_keep_idx), ...
@@ -597,6 +615,7 @@ if plot_diagnostic
         mX_norm_flims_to_plot = ...
                     abs(ensure_row(squeeze(X_norm_flims(idx_to_plot{:})))); 
         ax = pnl(2, 2, 4).select(); 
+        title(ax, '1/f-normalized mX, only f0 harmonics, flims applied (up to fs)'); 
         hold(ax, 'on');
  
         clusts = bwconncomp(flims_mask_all); 
@@ -631,7 +650,10 @@ if plot_diagnostic
     pnl(2, 1).xlabel('frequency');
     pnl(2, 2).xlabel('frequency');
 
-    pnl(2, 2).de.margin = [10, 3, 5, 3]; 
+    pnl(2, 2).de.margin = [10, 1, 3, 12]; 
+    pnl(2).margintop = 15; 
+    pnl.margin = [10, 10, 3, 1]; 
+    
             
 end
 
