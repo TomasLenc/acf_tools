@@ -142,7 +142,6 @@ lags = [];
 ap_linear = []; 
 mX = []; 
 freq = []; 
-ap_all = [];
 ap_linear = [];
 ap_par = []; 
 x_norm = []; 
@@ -210,7 +209,6 @@ if fit_ap
     % allocate
     shape = size(x);
     shape(end) = length(freq); 
-    ap_all = zeros(shape);
     ap_linear = zeros(shape);
     ap_par = cell([shape(1:end-1), 1]); 
     ap_optim_exitflag = nan([shape(1:end-1), 1]); 
@@ -248,12 +246,10 @@ if fit_ap
         ap_optim_exitflag(idx_while_loop{:}) = ap_optim_exitflag_iter;
 
         % generate aperiodic with the estimated parameters across the whole
-        % frequency range 
-        ap = aperiodic(ap_par{idx_while_loop{:}}, freq); 
-        ap_all(idx_while_loop{:}) = ap; 
-
-        % convert from loq-power space to linear magnitude space 
-        ap_pow = 10.^ap; 
+        % frequency range and convert from loq-power space to linear magnitude 
+        % space 
+        ap_log = aperiodic(ap_par{idx_while_loop{:}}, freq); 
+        ap_pow = 10.^ap_log; 
         ap_linear(idx_while_loop{:}) = sqrt(ap_pow); 
 
         % Update the index vector:
