@@ -224,9 +224,16 @@ if fit_ap
     idx_while_loop = [repmat({1}, 1, nv), {':'}]; 
     max_size_per_dim = size(x); % size of each dimension
     ready = false; 
+    c = 1; 
+    target_c = prod(shape(1:end-1)); 
     
     while ~ready
       
+        if verbose
+            fprintf('getting acf %d/%d\n', c, target_c);
+            c = c+1;
+        end
+        
         % fit aperiodic component
         if strcmp(ap_fit_method, 'fooof')
             
