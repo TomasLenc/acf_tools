@@ -78,26 +78,28 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = .
 parser = inputParser; 
 addParameter(parser, 'fit_ap', false)
 addParameter(parser, 'rm_ap', false)
-addParameter(parser, 'normalize_x', true)
-addParameter(parser, 'force_x_positive', false)
-addParameter(parser, 'normalize_acf_to_1', false)
-addParameter(parser, 'normalize_acf_z', false)
+addParameter(parser, 'ap_fit_method', 'fooof')
 addParameter(parser, 'get_x_norm', false)
 addParameter(parser, 'fit_knee', false)
 addParameter(parser, 'robust', false)
-addParameter(parser, 'verbose', 0)
 addParameter(parser, 'max_iter', 5000)
 addParameter(parser, 'ap_fit_flims', [0.1, fs/2])
 addParameter(parser, 'acf_flims', [0, Inf])
 addParameter(parser, 'f0_to_ignore', [])
 addParameter(parser, 'only_use_f0_harmonics', true)
 addParameter(parser, 'bins', [2, 5])
+addParameter(parser, 'verbose', 0)
 addParameter(parser, 'plot_diagnostic', false)
+addParameter(parser, 'normalize_x', true)
+addParameter(parser, 'force_x_positive', false)
+addParameter(parser, 'normalize_acf_to_1', false)
+addParameter(parser, 'normalize_acf_z', false)
 
 parse(parser, varargin{:})
 
 rm_ap               = parser.Results.rm_ap; 
 fit_ap              = parser.Results.fit_ap | rm_ap; % if rm_ap requested we have to fit anyway
+ap_fit_method       = parser.Results.ap_fit_method; 
 force_x_positive    = parser.Results.force_x_positive; 
 normalize_x         = parser.Results.normalize_x; 
 normalize_acf_to_1  = parser.Results.normalize_acf_to_1; 
@@ -189,21 +191,23 @@ if fit_ap
 
     % for 1/f fitting, replace harmonics of f0 with mean of the bins around
     mX_to_fit = mX; 
-    for i_f=1:length(freq_to_ignore)
-        idx_1 = max(freq_to_ignore_idx(i_f) - bins(2), 1); 
-        idx_2 = max(freq_to_ignore_idx(i_f) - bins(1), 1); 
-        idx_3 = min(freq_to_ignore_idx(i_f) + bins(1), hN); 
-        idx_4 = min(freq_to_ignore_idx(i_f) + bins(2), hN); 
-        
-        index = cell(1, ndims(x));
-        index(:) = {':'};
-        index{end} = [idx_1:idx_2, idx_3:idx_4];
-        mean_around_bin = mean(mX(index{:}), ndims(x)); 
-        
-        index = cell(1, ndims(x));
-        index(:) = {':'};
-        index{end} = freq_to_ignore_idx(i_f);
-        mX_to_fit(index{:}) = mean_around_bin; 
+    if strcmp(ap_fit_method, 'fooof')
+        for i_f=1:length(freq_to_ignore)
+            idx_1 = max(freq_to_ignore_idx(i_f) - bins(2), 1); 
+            idx_2 = max(freq_to_ignore_idx(i_f) - bins(1), 1); 
+            idx_3 = min(freq_to_ignore_idx(i_f) + bins(1), hN); 
+            idx_4 = min(freq_to_ignore_idx(i_f) + bins(2), hN); 
+
+            index = cell(1, ndims(x));
+            index(:) = {':'};
+            index{end} = [idx_1:idx_2, idx_3:idx_4];
+            mean_around_bin = mean(mX(index{:}), ndims(x)); 
+
+            index = cell(1, ndims(x));
+            index(:) = {':'};
+            index{end} = freq_to_ignore_idx(i_f);
+            mX_to_fit(index{:}) = mean_around_bin; 
+        end
     end
             
     % allocate
@@ -223,34 +227,64 @@ if fit_ap
     
     while ~ready
       
-        % get log power spectra
-        log_pow = log10(squeeze(mX_to_fit(idx_while_loop{:})) .^ 2); 
+        % fit aperiodic component
+        if strcmp(ap_fit_method, 'fooof')
+            
+            % get log power spectra
+            log_pow = log10(squeeze(mX_to_fit(idx_while_loop{:})) .^ 2); 
 
-        % restrict only to frequency range for 1/f fitting
-        log_pow_to_fit = log_pow(min_freq_idx : max_freq_idx); 
+            % restrict only to frequency range for 1/f fitting
+            log_pow_to_fit = log_pow(min_freq_idx : max_freq_idx); 
 
-        if ~iscolumn(log_pow_to_fit)
-            log_pow_to_fit = log_pow_to_fit'; 
+            if ~iscolumn(log_pow_to_fit)
+                log_pow_to_fit = log_pow_to_fit'; 
+            end
+            
+            [ap_par_iter, ap_optim_exitflag_iter] = fit_aperiodic(...
+                                freq_to_fit, log_pow_to_fit, ...
+                                'robust', robust, ...
+                                'fit_knee', fit_knee,...
+                                'verbose', verbose,...
+                                'max_iter', max_iter...
+                                ); 
+
+            ap_par{idx_while_loop{:}} = ap_par_iter;
+            ap_optim_exitflag(idx_while_loop{:}) = ap_optim_exitflag_iter;
+
+            % generate aperiodic with the estimated parameters across the whole
+            % frequency range and convert from loq-power space to linear magnitude 
+            % space 
+            ap_log = aperiodic(ap_par{idx_while_loop{:}}, freq); 
+            ap_pow = 10.^ap_log; 
+            ap_linear(idx_while_loop{:}) = sqrt(ap_pow); 
+            
+            
+        elseif strcmp(ap_fit_method, 'irasa')
+            
+            hset = [1.1 : 0.05 : 2]; 
+            
+            spec = amri_sig_fractal(x(idx_while_loop{:}), fs, ...
+                                    'frange', [0, fs/4], ...
+                                    'hset', hset);
+            
+            freq_to_fit = freq(freq > 0 & freq <= fs/4); 
+            
+            ap_pow = spec.frac; 
+            
+            ap_pow_rs = interp1(spec.freq, ap_pow, freq_to_fit);
+            
+            % add 0 Hz
+            ap_pow_rs = [0; ap_pow_rs]; 
+            
+            % append zeros to fill the rest of the spectrm up to nyquist 
+            ap_pow_rs = [ap_pow_rs; zeros(hN - length(ap_pow_rs), 1)]; 
+                                
+            ap_linear_rs = sqrt(ap_pow_rs); 
+            
+            ap_linear(idx_while_loop{:}) = ap_linear_rs; 
+                                                                                
         end
         
-        % fit aperiodic component
-        [ap_par_iter, ap_optim_exitflag_iter] = fit_aperiodic(...
-                            freq_to_fit, log_pow_to_fit, ...
-                            'robust', robust, ...
-                            'fit_knee', fit_knee,...
-                            'verbose', verbose,...
-                            'max_iter', max_iter...
-                            ); 
-                        
-        ap_par{idx_while_loop{:}} = ap_par_iter;
-        ap_optim_exitflag(idx_while_loop{:}) = ap_optim_exitflag_iter;
-
-        % generate aperiodic with the estimated parameters across the whole
-        % frequency range and convert from loq-power space to linear magnitude 
-        % space 
-        ap_log = aperiodic(ap_par{idx_while_loop{:}}, freq); 
-        ap_pow = 10.^ap_log; 
-        ap_linear(idx_while_loop{:}) = sqrt(ap_pow); 
 
         % Update the index vector:
         % Assume that the WHILE loop is ready
