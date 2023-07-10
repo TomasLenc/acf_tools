@@ -169,6 +169,12 @@ function test_acf_irasa(test_case)
     % mix them 
     x = s + noise;        
         
+    % original signal (ground truth)
+    [acf_orig, lags, ~, mX_orig, freq] = get_acf(...
+                                       s, fs, ...
+                                       'rm_ap', false ...
+                                       );     
+    
     % wihtout 1/f subtraction 
     [acf_raw, lags, ap, mX, freq, ap_par] = get_acf(...
                                        x, fs, ...
@@ -197,20 +203,28 @@ function test_acf_irasa(test_case)
                                        'plot_diagnostic', false ...
                                        ); 
                                    
+    acf_orig = zscore(acf_orig); 
     acf_raw = zscore(acf_raw); 
     acf_fooof = zscore(acf_fooof); 
     acf_irasa = zscore(acf_irasa); 
     
+%     figure
+%     plot(lags, acf_orig, 'linew', 1.3); 
+%     hold on 
+%     plot(lags, acf_raw, 'linew', 1.3); 
+%     plot(lags, acf_irasa, 'linew', 1.3); 
+%     plot(lags, acf_fooof, 'linew', 1.3); 
+%     xlabel('lag (s)'); 
+%     set(gca, 'fontsize', 12); 
+%     legend({'ground truth', 'raw', 'irasa', 'fooof'}, 'FontSize', 12); 
+%         
+    r_raw = corrcoef(acf_orig, acf_raw);
+    r_irasa = corrcoef(acf_orig, acf_irasa);
+    r_fooof = corrcoef(acf_orig, acf_fooof);
     
-    figure
-    plot(lags, acf_raw, 'linew', 1.3); 
-    hold on 
-    plot(lags, acf_irasa, 'linew', 1.3); 
-    plot(lags, acf_fooof, 'linew', 1.3); 
-    xlabel('lag (s)'); 
-    set(gca, 'fontsize', 12); 
-    legend({'raw', 'irasa', 'fooof'}, 'FontSize', 12); 
-        
+    assert(r_irasa(2) > r_raw(2))
+    assert(r_fooof(2) > r_raw(2))
+    
 end
 
 
