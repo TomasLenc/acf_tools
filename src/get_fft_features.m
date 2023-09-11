@@ -59,3 +59,4 @@ z_meter_rel = mean(z(index{:}), ndims(mX));
 
 feat = []; 
 feat.z_meter_rel = z_meter_rel; 
+feat.vals = amps; 
