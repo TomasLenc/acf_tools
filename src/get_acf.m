@@ -611,7 +611,9 @@ if plot_diagnostic
         % add 1/f component to the plot
         ap_whole_to_plot = ensure_row(squeeze(ap_whole_spect(idx_to_plot{:}))); 
         
-        ax.YLim = [0, max(mX_full_to_plot(freq_to_keep_idx))];
+        if ~isempty(freq_to_keep_idx)
+            ax.YLim = [0, max(mX_full_to_plot(freq_to_keep_idx))];
+        end
         
         hold(ax, 'on');
         plot(ax, freq_all, ap_whole_to_plot, '--', 'color', 'k', 'linew', 2);    
