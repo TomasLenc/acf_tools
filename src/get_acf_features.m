@@ -50,6 +50,11 @@ lags_meter_rel_idx = ensure_row(...
 lags_meter_unrel_idx = ensure_row(...
     find_idx_tol(lags, lags_meter_unrel, 'tol_to_warn', idx_find_tol)); 
 
+% extract all lags of interest 
+index = repmat({':'}, 1, ndims(acf)); 
+index{end} = [lags_meter_rel_idx, lags_meter_unrel_idx]; 
+acf_vals = acf(index{:}); 
+
 % normalize acf between 0 and 1
 if normalize_acf_vals
     warning('extracting features: values first normalized between 0 and 1'); 
@@ -59,10 +64,7 @@ if normalize_acf_vals
 %     acf_range = acf_max - acf_min; 
 %     acf = (acf - acf_min) ./ acf_range; 
     
-    % first get all lags of interest and normalize by the lowest & highest one
-    index = repmat({':'}, 1, ndims(acf)); 
-    index{end} = [lags_meter_rel_idx, lags_meter_unrel_idx]; 
-    acf_vals = acf(index{:}); 
+    % get all lags of interest and normalize by the lowest & highest one
     vals_min = min(acf_vals, [], ndims(acf)); 
     vals_max = max(acf_vals, [], ndims(acf)); 
     acf = (acf - vals_min) ./ (vals_max - vals_min); 
@@ -102,6 +104,6 @@ feat = [];
 feat.z_meter_rel = z_meter_rel; 
 feat.ratio_meter_rel = ratio_meter_rel; 
 feat.contrast_meter_rel = contrast_meter_rel; 
-
+feat.vals = acf_vals; 
 
 
