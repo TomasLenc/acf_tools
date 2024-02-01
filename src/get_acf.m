@@ -90,6 +90,10 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = .
 %     Parameters of the fittted 1/f component. 
 % x_norm : array_like
 %     1/f-normalized spectrum converted back to time domain (same shape as x).
+% X_norm : array_like
+%     Cnoise-corrected complex spectrum (1/f-subtracted and noise zeroed
+%     out if requested by the user). This specrtum has been used to compute
+%     the ACF.
 % ap_optim_exitflag : array_like
 %     Optimalization exitflag for each aperiodic fit. 
 % 
