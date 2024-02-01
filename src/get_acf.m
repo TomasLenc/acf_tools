@@ -444,9 +444,54 @@ if rm_ap
             idx_start = freq_to_keep_idx(fi) - length(keep_kernel) + 1; 
             mask(idx_start : freq_to_keep_idx(fi)) = flip(keep_kernel); 
         end
+                
         
-        X_norm_frex_only = X_norm .* mask; 
-        X_norm = X_norm_frex_only; 
+        % bloody acrobatics to get the proper array casting ... 
+        tmp = bsxfun(@times, ...
+                     permute(X_norm, flip([1:ndims(X_norm)])), ...
+                     ensure_col(mask)); 
+        
+        idx = repmat({':'}, 1, ndims(X_norm)); 
+        
+        X_norm(idx{:}) = permute(tmp, flip([1:ndims(X_norm)])); 
+        
+        X_norm_frex_only = X_norm; 
+        X_norm_frex_only(idx{:}) = permute(tmp, flip([1:ndims(X_norm)])); 
+        
+        
+        
+        
+%         nv = ndims(x) - 1;  % exclude last dimension
+%         idx_while_loop = [repmat({1}, 1, nv), {':'}]; 
+%         max_size_per_dim = size(x); % size of each dimension
+%         ready = false; 
+%         
+%         X_norm_frex_only = nan(size(X_norm)); 
+%         while ~ready
+%             % apply mask
+%             X_norm_frex_only(idx_while_loop{:}) = ...
+%                 squeeze(x(idx_while_loop{:})) .* mask; 
+%             % Update the index vector:
+%             % Assume that the WHILE loop is ready
+%             ready = true;       
+%              % Loop through dimensions
+%             for k = 1:nv        
+%                 % Increase current index by 1
+%                 idx_while_loop{k} = idx_while_loop{k} + 1;   
+%                 % Does it exceed the length of current dim?
+%                 if idx_while_loop{k} <= max_size_per_dim(k) 
+%                    % No, WHILE loop is not ready now
+%                    ready = false;  
+%                    % idx_while_loop(k) increased successfully, leave "for k" loop
+%                    break;         
+%                 end
+%                 % Reset idx_while_loop{k}, proceed to next k
+%                 idx_while_loop{k} = 1;          
+%             end
+%         end
+% 
+%         X_norm = X_norm_frex_only; 
+        
     end
         
 else
