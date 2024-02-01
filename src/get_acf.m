@@ -242,6 +242,13 @@ if fit_ap
         % fit aperiodic component
         if strcmp(ap_fit_method, 'fooof')
             
+            % FOOOF 
+            % -----
+            % This method requires spectra without sharp peaks. This is
+            % why we will use spectrum where we have set the magnitude at
+            % each response frequency to the avergae magnitude at
+            % surrounding frequency bins.
+            
             % get log power spectra
             log_pow = log10(squeeze(mX_to_fit(idx_while_loop{:})) .^ 2); 
 
@@ -273,28 +280,52 @@ if fit_ap
             
         elseif strcmp(ap_fit_method, 'irasa')
             
+            % IRASA 
+            % ----- 
+            % This method takes time-domain signal as an input,
+            % and removes any periodic activity without knowing anything
+            % about the rate of the periodicities. This is why we don't
+            % need to care about peaks at response frequencies in the
+            % magnitude spectrum. For details and discussion, see : 
+            % -> Gerster et al. Neuroinform 20, 991?1012 (2022)
+            
+            % set of scaling factors 
             hset = [1.1 : 0.05 : 2]; 
             
+            % estimate 1/f component 
             spec = amri_sig_fractal(squeeze(x(idx_while_loop{:})), fs, ...
                                     'frange', [0, fs/4], ...
                                     'hset', hset);
             
-            freq_to_fit = freq(freq > 0 & freq <= fs/4); 
-            
+            % The output is power spectrum
             ap_pow = spec.frac; 
+
+            % The output we get from IRASA has different frequency
+            % resolution, so we have to interpolate it to the frequency
+            % resolution of our signal. 
+            freq_to_fit = freq(freq > 0 & freq <= fs/4); 
             
             ap_pow_rs = interp1(spec.freq, ap_pow, freq_to_fit);
             
-            % add 0 Hz
+            % add zero magnitude at 0 Hz (IRASA removes/ignores 0 Hz)
             ap_pow_rs = [0; ap_pow_rs]; 
             
-            % append zeros to fill the rest of the spectrm up to nyquist 
+            % The valid output of IRASA is only up to the original nyquist
+            % times the highest scaling factor. E.g. if the highest scaling
+            % factor is 2, then the maximum valid frequency in the output
+            % will be nyquist / 2. This is good to keep in mind and sample
+            % the signal at a rate that is sufficiently high, so that the
+            % response is well captured even after the necessary bandwidth
+            % reduction by IRASA. Assuming this is the case, we can simply
+            % append zeros to fill the rest of the spectrm up to nyquist. 
             ap_pow_rs = [ap_pow_rs; zeros(hN - length(ap_pow_rs), 1)]; 
-                                
+                 
+            % Convert power spectrum back to magnitude spectrum
             ap_linear_rs = sqrt(ap_pow_rs); 
             
+            % assign to the output array
             ap_linear(idx_while_loop{:}) = ap_linear_rs; 
-                                                                                
+            
         end
         
 
