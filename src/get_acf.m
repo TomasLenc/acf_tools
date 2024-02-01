@@ -5,78 +5,87 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = .
 % Parameters
 % ----------
 % x : array_like, shape=[..., time]
-%     Input x with time as the last dimension. 
+%     Input x with time as the last dimension.
 % fs : int
-%     Sampling rate. 
+%     Sampling rate.
 % rm_ap : bool, default=false
-%     Whether to fit and remove the aperiodic component (1/f) from acf. 
+%     Whether to fit and remove the aperiodic component (1/f) from acf.
 % ap_fit_method : string, {'fooof', 'irasa'}, default='fooof'
-%     Name of the method that will be use to estimate the 1/f component. IRASA
-%     method is paramter free. For FOOOF, additional arguments can be tweaked,
-%     such as `f0_to_ignore`, and `ap_fit_flims`. 
+%     Name of the method that will be use to estimate the 1/f component.
+%     IRASA method is paramter free. For FOOOF, additional arguments can be
+%     tweaked, such as `f0_to_ignore`, and `ap_fit_flims`.
+% response_f0 : float, optional
+%     Fundamental frequency that characterizes the a-priori known rate of
+%     the periodic response. If provided, this value will be used (1)
+%     during 1/f fitting with FOOOF to remove any peaks at harmonics of
+%     this fundamental frequency. If `only_use_f0_harmonics` is true, only
+%     harmonics of this frequency will be kept during noise correction
+%     (after subtracting the 1/f component). 
 % only_use_f0_harmonics : bool, default=true
-%     If true, and the `f0_to_ignore` parameter is provided, after removing the
-%     estimated 1/f component, only complex values at harmonics of f0 will be
-%     retained. Everything else will be set to zero, and ACF will be computed
-%     on the resulting spectrum. This option should be used when we have a
-%     perfectly periodic signal, and we know the exact fundamnetal frequency at
-%     which the signal will project. This is powerful information that can be
-%     used to separate even better siganl from noise. 
-% f0_to_ignore : float, optional
-%     Fundamental frequency that will be ignored during 1/f fitting, along with 
-%     all its harmonics. 
+%     If true, after removing the estimated 1/f component, only complex
+%     values at harmonics of `response_f0` Hz (if provided), will be kept.
+%     Everything else will be set to zero, and ACF will be computed on the
+%     resulting complex spectrum. This option should be used when we have a
+%     perfectly periodic signal, and we know the exact fundamnetal
+%     frequency to which the signal will project. This is powerful
+%     information that can be used to separate even better siganl from
+%     noise.
 % bins : [int, int], default=[2, 5]
-%     Minimum and maximum frequency bin (on both sides) used to ignore 
-%     frequencies during 1/f fitting.
+%     Minimum and maximum frequency bin (on both sides) used to ignore
+%     frequencies during 1/f fitting (does not apply to IRASA).
 % ap_fit_flims : [float, float], default=[0.1, fs/2]
-%     The lowest and highest frequency that will be considered when fitting 
-%     the 1/f noies (default 0.1 Hz and nyquist). 
-% acf_flims : [float, float], default=[0, fs]
-%     The lowest and highest frequency that will be used to calculate the ACF.
-%     All frequencies outside of this range will be zeroed out in the complex
-%     spectrum before calculating the ACF. (default 0.1 Hz and sampling rate). 
-% plot_diagnostic : bool, default=false
-%     If true, a diagnostic plot for debugging In case of multidimensional 
-%     input `x`, only the first element is plotted. E.g. if the input has 
-%     dimensions [subject x time], the only the data for the first subject 
-%     are plotted in the diagnostic plot. 
-% get_x_norm : bool, default=false
-%     Whether to also return 1/f-subtracted signal in the time domain. 
+%     For FOOOF only. The lowest and highest frequency that will be
+%     considered when fitting the 1/f noies (default 0.1 Hz and nyquist).
 % fit_knee : bool, default=false
-%     Whether to use the knee parameter when fitting 1/f. 
+%     For FOOOF only. Whether to use the knee parameter when fitting 1/f.
 % robust : bool, optional, default=false
-%     If true, the 1/f estimate will be computed using a "robust fit" procedure
-%     described by Donoghue et al. 2020. 
-% normalize_x : bool, default=true
-%     Normalize time-domain input to mean 0 and SD 1 (i.e. zscore). 
-% normalize_acf_to_1 : bool, default=false
-%     Divide the resulting full ACF by its maximum value. 
-% normalize_acf_z : bool, default=false
-%     Normalize the restulting full ACF to mean 0 and SD 1 (i.e. zscore). 
-% verbose : int {0, 1, 2}, optional, default=0
-%     Verbosity level for the 1/f parameter fitting routine. The higher the 
-%     number the more verbose the optimizer will be. 
+%     For FOOOF only. If true, the 1/f estimate will be computed using a
+%     "robust fit" procedure described by Donoghue et al. 2020.
 % max_iter : int, optional, default=5000
-%     Maximum number of iterations during 1/f parameter fitting. 
+%     For FOOOF only. Maximum number of iterations during 1/f parameter
+%     fitting.
+% acf_flims : [float, float], default=[0, fs]
+%     The lowest and highest frequency that will be used to calculate the
+%     ACF. All frequencies outside of this range will be zeroed out in the
+%     complex spectrum before calculating the ACF. (default 0.1 Hz and
+%     sampling rate).
+% plot_diagnostic : bool, default=false
+%     If true, a diagnostic plot for debugging In case of multidimensional
+%     input `x`, only the first element is plotted. E.g. if the input has
+%     dimensions [subject x time], the only the data for the first subject
+%     are plotted in the diagnostic plot.
+% get_x_norm : bool, default=false
+%     Whether to also return 1/f-subtracted signal in the time domain.
+% normalize_x : bool, default=true
+%     Normalize time-domain input to mean 0 and SD 1 (i.e. zscore).
+% normalize_acf_to_1 : bool, default=false
+%     Divide the resulting full ACF by its maximum value.
+% normalize_acf_z : bool, default=false
+%     Normalize the restulting full ACF to mean 0 and SD 1 (i.e. zscore).
+% verbose : int {0, 1, 2}, optional, default=0
+%     Verbosity level for the 1/f parameter fitting routine. The higher the
+%     number the more verbose the optimizer will be.
 % 
 % Returns 
 % -------
 % acf : array_like, shape=[..., lags]
-%     Autocorrelation function of the input (lags are on the last dimension). 
+%     Autocorrelation function of the input (lags are on the last
+%     dimension).
 % lags : array_like
-%     Lags in seconds for the autocorrelation function. 
+%     Lags in seconds for the autocorrelation function.
 % ap_linear : array_like, shape=[..., frequency]
-%     Fitted 1/f component for the FFT in linear scale (same shape as mX). 
+%     Fitted 1/f component for the FFT in linear scale (same shape as mX).
 % mX : array_like, shape=[..., frequency]
-%     Magnitude spectra (frequencies are on the last dimension). 
+%     Magnitude spectra (frequencies are on the last dimension).
 % freq : array_like
-%     Frequencies for the FFT. 
+%     Frequencies for the FFT.
 % ap_par : cell
-%     Parameters of the fittted 1/f component. 
+%     Parameters of the fittted 1/f component.
 % x_norm : array_like
-%     1/f-normalized spectrum converted back to time domain (same shape as x).
+%     1/f-normalized spectrum converted back to time domain (same shape as
+%     x).
 % ap_optim_exitflag : array_like
-%     Optimalization exitflag for each aperiodic fit. 
+%     Optimalization exitflag for each aperiodic fit.
 % 
 
 parser = inputParser; 
@@ -89,7 +98,7 @@ addParameter(parser, 'robust', false)
 addParameter(parser, 'max_iter', 5000)
 addParameter(parser, 'ap_fit_flims', [0.1, fs/2])
 addParameter(parser, 'acf_flims', [0, Inf])
-addParameter(parser, 'f0_to_ignore', [])
+addParameter(parser, 'response_f0', [])
 addParameter(parser, 'only_use_f0_harmonics', true)
 addParameter(parser, 'bins', [2, 5])
 addParameter(parser, 'verbose', 0)
@@ -115,14 +124,14 @@ verbose             = parser.Results.verbose;
 max_iter            = parser.Results.max_iter; 
 ap_fit_flims        = parser.Results.ap_fit_flims; 
 acf_flims           = parser.Results.acf_flims; 
-f0_to_ignore        = parser.Results.f0_to_ignore; 
+response_f0         = parser.Results.response_f0; 
 only_use_f0_harmonics = parser.Results.only_use_f0_harmonics; 
 bins                = parser.Results.bins; 
 plot_diagnostic     = parser.Results.plot_diagnostic; 
 
 
-if isrow(f0_to_ignore)
-    f0_to_ignore = f0_to_ignore'; 
+if isrow(response_f0)
+    response_f0 = response_f0'; 
 end
 
 % check if x is a row vector (common mistake, the default warnings are cryptic...)
@@ -191,7 +200,7 @@ if fit_ap
     freq_to_fit = freq(min_freq_idx : max_freq_idx); 
     
     % ignore all harmonics of f0 up to nyquist frequency
-    freq_to_ignore = [f0_to_ignore : f0_to_ignore : nyq]'; 
+    freq_to_ignore = [response_f0 : response_f0 : nyq]'; 
     freq_to_ignore_idx = dsearchn(freq, freq_to_ignore); 
 
     % for 1/f fitting, replace harmonics of f0 with mean of the bins around
