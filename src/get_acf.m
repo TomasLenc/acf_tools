@@ -160,8 +160,8 @@ freq = [];
 ap_linear = [];
 ap_par = []; 
 x_norm = []; 
-freq_to_ignore = [];
-freq_to_ignore_idx = []; 
+freq_response = [];
+freq_response_idx = []; 
 
 % get whole-trial FFT
 nyq = fs/2; 
@@ -200,17 +200,17 @@ if fit_ap
     freq_to_fit = freq(min_freq_idx : max_freq_idx); 
     
     % ignore all harmonics of f0 up to nyquist frequency
-    freq_to_ignore = [response_f0 : response_f0 : nyq]'; 
-    freq_to_ignore_idx = dsearchn(freq, freq_to_ignore); 
+    freq_response = [response_f0 : response_f0 : nyq]'; 
+    freq_response_idx = dsearchn(freq, freq_response); 
 
     % for 1/f fitting, replace harmonics of f0 with mean of the bins around
     mX_to_fit = mX; 
     if strcmp(ap_fit_method, 'fooof')
-        for i_f=1:length(freq_to_ignore)
-            idx_1 = max(freq_to_ignore_idx(i_f) - bins(2), 1); 
-            idx_2 = max(freq_to_ignore_idx(i_f) - bins(1), 1); 
-            idx_3 = min(freq_to_ignore_idx(i_f) + bins(1), hN); 
-            idx_4 = min(freq_to_ignore_idx(i_f) + bins(2), hN); 
+        for i_f=1:length(freq_response)
+            idx_1 = max(freq_response_idx(i_f) - bins(2), 1); 
+            idx_2 = max(freq_response_idx(i_f) - bins(1), 1); 
+            idx_3 = min(freq_response_idx(i_f) + bins(1), hN); 
+            idx_4 = min(freq_response_idx(i_f) + bins(2), hN); 
 
             index = cell(1, ndims(x));
             index(:) = {':'};
@@ -219,7 +219,7 @@ if fit_ap
 
             index = cell(1, ndims(x));
             index(:) = {':'};
-            index{end} = freq_to_ignore_idx(i_f);
+            index{end} = freq_response_idx(i_f);
             mX_to_fit(index{:}) = mean_around_bin; 
         end
     end
@@ -394,9 +394,9 @@ if rm_ap
     % If we know which frequency bins the signal is going to project to, we can
     % simply ONLY RETAIN SIGNAL FREQUENCIES and set the complex numbers at all
     % other frequency bins to zero. 
-    if ~isempty(freq_to_ignore_idx) && only_use_f0_harmonics
+    if ~isempty(freq_response_idx) && only_use_f0_harmonics
 
-        freq_to_keep_idx = [freq_to_ignore_idx; N - freq_to_ignore_idx + 2]; 
+        freq_to_keep_idx = [freq_response_idx; N - freq_response_idx + 2]; 
         index = repmat({':'}, 1, ndims(x)); 
         index{end} = freq_to_keep_idx; 
 
@@ -539,14 +539,14 @@ if plot_diagnostic
 
     plot_fft(freq, mX_to_plot, ...
              'ax', ax, ...
-             'frex_meter_rel', freq_to_ignore, ...
+             'frex_meter_rel', freq_response, ...
              'maxfreqlim', nyq, ...
              'linew', 1); 
     ax.YAxis.Visible = 'on';
     ax.XAxis.Visible = 'on';
     ax.XTick = [0, nyq];
-    if ~isempty(freq_to_ignore)
-        ax.YLim = [0, max(mX_to_plot(freq_to_ignore_idx))];
+    if ~isempty(freq_response)
+        ax.YLim = [0, max(mX_to_plot(freq_response_idx))];
     end
     
     
@@ -573,12 +573,12 @@ if plot_diagnostic
 
         plot_fft(freq, mX_to_fit_plot, ...
                  'ax', ax, ...
-                 'frex_meter_rel', freq_to_ignore, ...
+                 'frex_meter_rel', freq_response, ...
                  'maxfreqlim', nyq, ...
                  'linew', 1); 
         ax.YAxis.Visible = 'off';
-        if ~isempty(freq_to_ignore)
-            ax.YLim = [0, max(mX_to_plot(freq_to_ignore_idx))];
+        if ~isempty(freq_response)
+            ax.YLim = [0, max(mX_to_plot(freq_response_idx))];
         end
         ax.XAxis.Visible = 'on';
         ax.XTick = [0, nyq];
@@ -601,7 +601,7 @@ if plot_diagnostic
     % ===========================================================================
 
     freq_all = [0 : N-1] / N * fs;
-    freq_to_keep_idx = [freq_to_ignore_idx; N - freq_to_ignore_idx + 2]; 
+    freq_to_keep_idx = [freq_response_idx; N - freq_response_idx + 2]; 
 
     pnl(2, 2).pack('v', 4);
 
