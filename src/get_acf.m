@@ -10,10 +10,12 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = .
 %     Sampling rate. 
 % rm_ap : bool, default=false
 %     Whether to fit and remove the aperiodic component (1/f) from acf. 
-% ap_fit_method : string, {'fooof', 'irasa'}, default='fooof'
-%     Name of the method that will be use to estimate the 1/f component. IRASA
-%     method is paramter free. For FOOOF, additional arguments can be tweaked,
-%     such as `f0_to_ignore`, and `ap_fit_flims`. 
+% ap_fit_method : string, {'fooof', 'irasa', 'bins_around'}, default='fooof'
+%     Name of the method that will be use to estimate the 1/f component.
+%     IRASA method is paramter free. For FOOOF, additional arguments can be
+%     tweaked, such as `f0_to_ignore`, and `ap_fit_flims`. For the
+%     bins_around method, consider also providing the fundamental frequency
+%     of the response (`f0_to_ignore` parameter). g
 % only_use_f0_harmonics : bool, default=true
 %     If true, and the `f0_to_ignore` parameter is provided, after removing the
 %     estimated 1/f component, only complex values at harmonics of f0 will be
