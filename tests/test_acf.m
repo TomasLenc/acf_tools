@@ -109,6 +109,51 @@ function test_acf_multidim_irasa(test_case)
 end
 
 
+
+function test_acf_multidim_bins_around(test_case)
+
+    fs = 100; 
+    x = pinknoise(fs * 60)'; 
+    x = x - min(x); 
+    x_multi_dim = []; 
+    x_multi_dim(:, 1, 1, 1, 1, :) = [x; 4.4 + 2 * x]; 
+    [acf, lags, ap, mX, freq, ap_par] = get_acf(x_multi_dim, fs, ...
+                                               'rm_ap', true, ...
+                                               'ap_fit_method', 'bins_around' ...
+                                               ); 
+    expected_size = size(x_multi_dim); 
+    expected_size(end) = length(lags); 
+    assert(all(size(acf) == expected_size))
+    
+    verifyNotEqual(test_case, ...
+                   squeeze(mX(1,1,1,1,1,:)), ...
+                   squeeze(mX(2,1,1,1,1,:)))
+               
+    verifyNotEqual(test_case, ...
+                   squeeze(acf(1,1,1,1,1,:)), ...
+                   squeeze(acf(2,1,1,1,1,:)))
+
+    [acf_1, ~, ap_1, mX_1, ~, ap_par] = get_acf(...
+                   squeeze(x_multi_dim(1,1,1,1,1,:))', fs, ...
+                   'rm_ap', true, ...
+                   'ap_fit_method', 'bins_around' ...
+                   ); 
+    [acf_2, ~, ap_2, mX_2] = get_acf(...
+                   squeeze(x_multi_dim(2,1,1,1,1,:))', fs, ...
+                   'rm_ap', true, ...
+                   'ap_fit_method', 'bins_around' ...
+                   ); 
+
+    verifyEqual(test_case, squeeze(acf(1,1,1,1,1,:)), acf_1'); 
+    verifyEqual(test_case, squeeze(acf(2,1,1,1,1,:)), acf_2'); 
+    
+    verifyEqual(test_case, squeeze(ap(1,1,1,1,1,:)), ap_1'); 
+    verifyEqual(test_case, squeeze(ap(2,1,1,1,1,:)), ap_2'); 
+    
+end
+
+
+
 function test_acf_f0_ignore(test_case)
 
 %     fs = 100; 
@@ -260,6 +305,88 @@ function test_acf_irasa(test_case)
     
     assert(r_irasa(2) > r_raw(2))
     assert(r_fooof(2) > r_raw(2))
+    
+end
+
+
+
+
+
+
+function test_acf_bins_around(test_case)
+
+    fs = 100; 
+    trial_dur = 60; 
+    % get noies
+    noise = pinknoise(fs * trial_dur)'; 
+    noise = zscore(noise); 
+    % get signal 
+    p0 = 0.8; 
+    s = zeros(size(noise)); 
+    event = ones(1, round(0.2 * fs)); 
+    onsets = [p0 : p0 : trial_dur-p0];
+    for i=1:length(onsets)
+        idx = round(onsets(i) * fs); 
+        s(idx+1 : idx+length(event)) = event; 
+    end
+    % mix them 
+    x = s + noise;        
+        
+    % original signal (ground truth)
+    [acf_orig, lags, ~, mX_orig, freq] = get_acf(...
+                                       s, fs, ...
+                                       'rm_ap', false ...
+                                       );     
+    
+    % wihtout 1/f subtraction 
+    [acf_raw, lags, ap, mX, freq, ap_par] = get_acf(...
+                                       x, fs, ...
+                                       'rm_ap', false ...
+                                       );     
+                                   
+    % with 1/f subtraction - bins_around method
+    [acf_bins_around, lags, ap, mX, freq, ap_par] = get_acf(...
+                                       x, fs, ...
+                                       'rm_ap', true, ...
+                                       'f0_to_ignore', 1/p0, ...
+                                       'ap_fit_method', 'bins_around', ...
+                                       'only_use_f0_harmonics', false ...
+                                       ); 
+
+    acf_orig = zscore(acf_orig); 
+    acf_raw = zscore(acf_raw); 
+    acf_bins_around = zscore(acf_bins_around); 
+
+    r_raw = corrcoef(acf_orig, acf_raw);
+    r_bins_around = corrcoef(acf_orig, acf_bins_around);
+    assert(r_bins_around(2) > r_raw(2))
+
+    [acf_bins_around, lags, ap, mX, freq, ap_par] = get_acf(...
+                                       x, fs, ...
+                                       'rm_ap', true, ...
+                                       'ap_fit_method', 'bins_around', ...
+                                       'bins', [2, 5], ...
+                                       'only_use_f0_harmonics', false ...
+                                       ); 
+
+    acf_orig = zscore(acf_orig); 
+    acf_raw = zscore(acf_raw); 
+    acf_bins_around = zscore(acf_bins_around); 
+
+    r_raw = corrcoef(acf_orig, acf_raw);
+    r_bins_around = corrcoef(acf_orig, acf_bins_around);
+    assert(r_bins_around(2) > r_raw(2))
+    
+    
+%     figure
+%     plot(lags, acf_orig, 'linew', 1.3); 
+%     hold on 
+%     plot(lags, acf_raw, 'linew', 1.3); 
+%     plot(lags, acf_bins_around, 'linew', 1.3); 
+%     xlabel('lag (s)'); 
+%     set(gca, 'fontsize', 12); 
+%     legend({'ground truth', 'raw', 'bins around'}, 'FontSize', 12); 
+
     
 end
 

@@ -194,9 +194,37 @@ if fit_ap
     freq_to_ignore = [f0_to_ignore : f0_to_ignore : nyq]'; 
     freq_to_ignore_idx = dsearchn(freq, freq_to_ignore); 
 
-    % for 1/f fitting, replace harmonics of f0 with mean of the bins around
-    mX_to_fit = mX; 
-    if strcmp(ap_fit_method, 'fooof')
+    % Replace harmonics of f0 with mean of the bins around. This will be
+    % used for 1/f fitting with FOOOF, and, in fact, this is already an
+    % estimate of the 1/f noise component that is the output of the
+    % "bins_around" method. 
+    mX_without_response = mX; 
+    if strcmp(ap_fit_method, 'fooof') || ...
+       strcmp(ap_fit_method, 'bins_around')        
+        % if the user didnt' provide response fundamental frequency
+        % (response f0), this loop can still run but the output may not
+        % be reliable - let's issue a warning just to be sure they know
+        % what they are doing 
+        if isempty(freq_to_ignore)
+            warning([
+                '1/f fitting with "%s" but no response frequency provided. \n',  ...
+                'Just making sure you know what you are doing. \n', ...
+                'Consider using the `f0_to_ignore` parameter', ...
+                ], ap_fit_method); 
+        else
+            % check that the distance between harmonics of the response is
+            % larger than the furthest bin that will be used to estimate
+            % noise
+            if (f0_to_ignore < (bins(2) * fs / N))
+                warning([
+                    'the surrouding bins used to estimate noise magniude ', ...
+                    'are too wide (%d to %d). \nThe noise ', ... 
+                    'estimate will be bad since it will capture the response ', ...
+                    'at the next/previos \nresponse harmonc (f0 = %.1f Hz)'], ...
+                    bins(1), bins(2), f0_to_ignore); 
+            end
+        end
+        
         for i_f=1:length(freq_to_ignore)
             idx_1 = max(freq_to_ignore_idx(i_f) - bins(2), 1); 
             idx_2 = max(freq_to_ignore_idx(i_f) - bins(1), 1); 
@@ -211,10 +239,16 @@ if fit_ap
             index = cell(1, ndims(x));
             index(:) = {':'};
             index{end} = freq_to_ignore_idx(i_f);
-            mX_to_fit(index{:}) = mean_around_bin; 
+            mX_without_response(index{:}) = mean_around_bin; 
         end
     end
-            
+    if strcmp(ap_fit_method, 'fooof')
+        mX_to_fit = mX_without_response; 
+    elseif strcmp(ap_fit_method, 'irasa') || ...
+           strcmp(ap_fit_method, 'bins_around')
+        mX_to_fit = mX; 
+    end
+    
     % allocate
     shape = size(x);
     shape(end) = length(freq); 
@@ -325,6 +359,42 @@ if fit_ap
             
             % assign to the output array
             ap_linear(idx_while_loop{:}) = ap_linear_rs; 
+            
+            
+        elseif strcmp(ap_fit_method, 'bins_around')
+            
+            % bins_around 
+            % ----------- 
+            % This method is inspired by the way
+            % noise correction is implemented in many frequency-tagging
+            % studies. In letswave6 matlab package, this procedure is
+            % implemented in the function RLW_SNR(). The idea is very
+            % simple: go over the spectrum bin by bin. At each frequency
+            % bin take the avreage magnitude at several neighbouring
+            % frequency bins and subtract this value from the magnitude at
+            % the current frequency bin. This method is based on the
+            % assumption that the noise is smooth and broadband while
+            % response is periodic and reflected in sharp peaks in the
+            % spectrum. Even though this method is not optimal for 1/f
+            % noise (the steeper the worse), but most of the time it's good
+            % enough, and incredibly fast. 
+            
+            if ~isempty(freq_to_ignore)
+                % if we have information about the frequencies in the
+                % response, we can directly use a function from rnb_tools
+                % and simply replace the magnitude at response bin with the
+                % mean magnitude of the surrounding bins
+                ap_estim = mX_without_response(idx_while_loop{:});                 
+            else 
+                % if we don't know the frequencies where the response is,
+                % we need to do the same thin to each single frequency bin
+                ap_estim = interp_noise_bins(mX(idx_while_loop{:}), ...
+                                             [1:length(mX)], ...
+                                             bins(1), bins(2)); 
+            end
+            
+            % assign the result 
+            ap_linear(idx_while_loop{:}) = ap_estim; 
             
         end
         
