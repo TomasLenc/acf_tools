@@ -5,9 +5,9 @@ function [acf, lags, ap_linear, mX, freq, x_norm, X_norm, ap_par, ap_optim_exitf
 % Parameters
 % ----------
 % x : array_like, shape=[..., time]
-%     Input x with time as the last dimension. 
+%     Input x with time as the last dimension.
 % fs : int
-%     Sampling rate. 
+%     Sampling rate.
 % rm_ap : bool, default=false
 %     Whether to fit and remove the aperiodic component (1/f) from acf. 
 % ap_fit_method : string, {'fooof', 'irasa', 'bins_around'}, default='fooof'
@@ -16,6 +16,13 @@ function [acf, lags, ap_linear, mX, freq, x_norm, X_norm, ap_par, ap_optim_exitf
 %     tweaked, such as `f0_to_ignore`, and `ap_fit_flims`. For the
 %     bins_around method, consider also providing the fundamental frequency
 %     of the response (`f0_to_ignore` parameter). g
+% response_f0 : float, optional
+%     Fundamental frequency that characterizes the a-priori known rate of
+%     the periodic response. If provided, this value will be used (1)
+%     during 1/f fitting with FOOOF to remove any peaks at harmonics of
+%     this fundamental frequency. If `only_use_f0_harmonics` is true, only
+%     harmonics of this frequency will be kept during noise correction
+%     (after subtracting the 1/f component). 
 % only_use_f0_harmonics : bool, default=true
 %     If true, and the `f0_to_ignore` parameter is provided, after removing the
 %     estimated 1/f component, only complex values at harmonics of f0 will be
@@ -40,53 +47,54 @@ function [acf, lags, ap_linear, mX, freq, x_norm, X_norm, ap_par, ap_optim_exitf
 %                               /        |        \                                              
 %          ____________________/         |         \____________________
 %                           -30 -20      0      20  30
-% f0_to_ignore : float, optional
-%     Fundamental frequency that will be ignored during 1/f fitting, along with 
-%     all its harmonics. 
+% 
 % bins : [int, int], default=[2, 5]
-%     Minimum and maximum frequency bin (on both sides) used to ignore 
-%     frequencies during 1/f fitting.
+%     Minimum and maximum frequency bin (on both sides) used to ignore
+%     frequencies during 1/f fitting (does not apply to IRASA).
 % ap_fit_flims : [float, float], default=[0.1, fs/2]
-%     The lowest and highest frequency that will be considered when fitting 
-%     the 1/f noies (default 0.1 Hz and nyquist). 
-% acf_flims : [float, float], default=[0, fs]
-%     The lowest and highest frequency that will be used to calculate the ACF.
-%     All frequencies outside of this range will be zeroed out in the complex
-%     spectrum before calculating the ACF. (default 0.1 Hz and sampling rate). 
-% plot_diagnostic : bool, default=false
-%     If true, a diagnostic plot for debugging In case of multidimensional 
-%     input `x`, only the first element is plotted. E.g. if the input has 
-%     dimensions [subject x time], the only the data for the first subject 
-%     are plotted in the diagnostic plot. 
-% get_x_norm : bool, default=false
-%     Whether to also return 1/f-subtracted signal in the time domain. 
+%     For FOOOF only. The lowest and highest frequency that will be
+%     considered when fitting the 1/f noies (default 0.1 Hz and nyquist).
 % fit_knee : bool, default=false
-%     Whether to use the knee parameter when fitting 1/f. 
+%     For FOOOF only. Whether to use the knee parameter when fitting 1/f.
 % robust : bool, optional, default=false
-%     If true, the 1/f estimate will be computed using a "robust fit" procedure
-%     described by Donoghue et al. 2020. 
-% normalize_x : bool, default=true
-%     Normalize time-domain input to mean 0 and SD 1 (i.e. zscore). 
-% normalize_acf_to_1 : bool, default=false
-%     Divide the resulting full ACF by its maximum value. 
-% normalize_acf_z : bool, default=false
-%     Normalize the restulting full ACF to mean 0 and SD 1 (i.e. zscore). 
-% verbose : int {0, 1, 2}, optional, default=0
-%     Verbosity level for the 1/f parameter fitting routine. The higher the 
-%     number the more verbose the optimizer will be. 
+%     For FOOOF only. If true, the 1/f estimate will be computed using a
+%     "robust fit" procedure described by Donoghue et al. 2020.
 % max_iter : int, optional, default=5000
-%     Maximum number of iterations during 1/f parameter fitting. 
+%     For FOOOF only. Maximum number of iterations during 1/f parameter
+%     fitting.
+% acf_flims : [float, float], default=[0, fs]
+%     The lowest and highest frequency that will be used to calculate the
+%     ACF. All frequencies outside of this range will be zeroed out in the
+%     complex spectrum before calculating the ACF. (default 0.1 Hz and
+%     sampling rate).
+% plot_diagnostic : bool, default=false
+%     If true, a diagnostic plot for debugging In case of multidimensional
+%     input `x`, only the first element is plotted. E.g. if the input has
+%     dimensions [subject x time], the only the data for the first subject
+%     are plotted in the diagnostic plot.
+% get_x_norm : bool, default=false
+%     Whether to also return 1/f-subtracted signal in the time domain.
+% normalize_x : bool, default=true
+%     Normalize time-domain input to mean 0 and SD 1 (i.e. zscore).
+% normalize_acf_to_1 : bool, default=false
+%     Divide the resulting full ACF by its maximum value.
+% normalize_acf_z : bool, default=false
+%     Normalize the restulting full ACF to mean 0 and SD 1 (i.e. zscore).
+% verbose : int {0, 1, 2}, optional, default=0
+%     Verbosity level for the 1/f parameter fitting routine. The higher the
+%     number the more verbose the optimizer will be.
 % 
 % Returns 
 % -------
 % acf : array_like, shape=[..., lags]
-%     Autocorrelation function of the input (lags are on the last dimension). 
+%     Autocorrelation function of the input (lags are on the last
+%     dimension).
 % lags : array_like
-%     Lags in seconds for the autocorrelation function. 
+%     Lags in seconds for the autocorrelation function.
 % ap_linear : array_like, shape=[..., frequency]
-%     Fitted 1/f component for the FFT in linear scale (same shape as mX). 
+%     Fitted 1/f component for the FFT in linear scale (same shape as mX).
 % mX : array_like, shape=[..., frequency]
-%     Magnitude spectra (frequencies are on the last dimension). 
+%     Magnitude spectra (frequencies are on the last dimension).
 % freq : array_like
 %     Frequencies for the FFT. 
 % x_norm : array_like
@@ -98,7 +106,7 @@ function [acf, lags, ap_linear, mX, freq, x_norm, X_norm, ap_par, ap_optim_exitf
 % ap_par : cell
 %     Parameters of the fittted 1/f component. 
 % ap_optim_exitflag : array_like
-%     Optimalization exitflag for each aperiodic fit. 
+%     Optimalization exitflag for each aperiodic fit.
 % 
 
 parser = inputParser; 
@@ -111,7 +119,7 @@ addParameter(parser, 'robust', false)
 addParameter(parser, 'max_iter', 5000)
 addParameter(parser, 'ap_fit_flims', [0.1, fs/2])
 addParameter(parser, 'acf_flims', [0, Inf])
-addParameter(parser, 'f0_to_ignore', [])
+addParameter(parser, 'response_f0', [])
 addParameter(parser, 'only_use_f0_harmonics', true)
 addParameter(parser, 'keep_band_around_f0_harmonics', [1, 1])
 addParameter(parser, 'bins', [2, 5])
@@ -141,7 +149,7 @@ verbose             = parser.Results.verbose;
 max_iter            = parser.Results.max_iter; 
 ap_fit_flims        = parser.Results.ap_fit_flims; 
 acf_flims           = parser.Results.acf_flims; 
-f0_to_ignore        = parser.Results.f0_to_ignore; 
+response_f0         = parser.Results.response_f0; 
 only_use_f0_harmonics = ...
                       parser.Results.only_use_f0_harmonics; 
 keep_band_around_f0_harmonics = ...
@@ -150,8 +158,8 @@ bins                = parser.Results.bins;
 plot_diagnostic     = parser.Results.plot_diagnostic; 
 
 
-if isrow(f0_to_ignore)
-    f0_to_ignore = f0_to_ignore'; 
+if isrow(response_f0)
+    response_f0 = response_f0'; 
 end
 
 % check if x is a row vector (common mistake, the default warnings are cryptic...)
@@ -180,8 +188,8 @@ freq = [];
 ap_linear = [];
 ap_par = []; 
 x_norm = []; 
-freq_to_ignore = [];
-freq_to_ignore_idx = []; 
+freq_response = [];
+freq_response_idx = []; 
 
 % get whole-trial FFT
 nyq = fs/2; 
@@ -220,8 +228,8 @@ if fit_ap
     freq_to_fit = freq(min_freq_idx : max_freq_idx); 
     
     % ignore all harmonics of f0 up to nyquist frequency
-    freq_to_ignore = [f0_to_ignore : f0_to_ignore : nyq]'; 
-    freq_to_ignore_idx = dsearchn(freq, freq_to_ignore); 
+    freq_response = [response_f0 : response_f0 : nyq]'; 
+    freq_response_idx = dsearchn(freq, freq_response); 
 
     % Replace harmonics of f0 with mean of the bins around. This will be
     % used for 1/f fitting with FOOOF, and, in fact, this is already an
@@ -234,7 +242,7 @@ if fit_ap
         % (response f0), this loop can still run but the output may not
         % be reliable - let's issue a warning just to be sure they know
         % what they are doing 
-        if isempty(freq_to_ignore)
+        if isempty(freq_response)
             warning([
                 '1/f fitting with "%s" but no response frequency provided. \n',  ...
                 'Just making sure you know what you are doing. \n', ...
@@ -244,21 +252,21 @@ if fit_ap
             % check that the distance between harmonics of the response is
             % larger than the furthest bin that will be used to estimate
             % noise
-            if (f0_to_ignore < (bins(2) * fs / N))
+            if (response_f0 < (bins(2) * fs / N))
                 warning([
                     'the surrouding bins used to estimate noise magnitude ', ...
                     'are too wide (%d to %d). \nThe noise ', ... 
                     'estimate will be bad since it will capture the response ', ...
                     'at the next/previos \nresponse harmonc (f0 = %.1f Hz)'], ...
-                    bins(1), bins(2), f0_to_ignore); 
+                    bins(1), bins(2), response_f0); 
             end
         end
         
-        for i_f=1:length(freq_to_ignore)
-            idx_1 = max(freq_to_ignore_idx(i_f) - bins(2), 1); 
-            idx_2 = max(freq_to_ignore_idx(i_f) - bins(1), 1); 
-            idx_3 = min(freq_to_ignore_idx(i_f) + bins(1), hN); 
-            idx_4 = min(freq_to_ignore_idx(i_f) + bins(2), hN); 
+        for i_f=1:length(freq_response)
+            idx_1 = max(freq_response_idx(i_f) - bins(2), 1); 
+            idx_2 = max(freq_response_idx(i_f) - bins(1), 1); 
+            idx_3 = min(freq_response_idx(i_f) + bins(1), hN); 
+            idx_4 = min(freq_response_idx(i_f) + bins(2), hN); 
 
             index = cell(1, ndims(x));
             index(:) = {':'};
@@ -267,10 +275,11 @@ if fit_ap
 
             index = cell(1, ndims(x));
             index(:) = {':'};
-            index{end} = freq_to_ignore_idx(i_f);
+            index{end} = freq_response_idx(i_f);
             mX_without_response(index{:}) = mean_around_bin; 
         end
     end
+    
     if strcmp(ap_fit_method, 'fooof')
         mX_to_fit = mX_without_response; 
     elseif strcmp(ap_fit_method, 'irasa') || ...
@@ -408,7 +417,7 @@ if fit_ap
             % noise (the steeper the worse), but most of the time it's good
             % enough, and incredibly fast.
             
-            if ~isempty(freq_to_ignore)
+            if ~isempty(freq_response)
                 % if we have information about the frequencies in the
                 % response, we can directly use a function from rnb_tools
                 % and simply replace the magnitude at response bin with the
@@ -521,18 +530,19 @@ if rm_ap
     % If we know which frequency bins the signal is going to project to, we can
     % simply ONLY RETAIN SIGNAL FREQUENCIES and set the complex numbers at all
     % other frequency bins to zero. 
-    if ~isempty(freq_to_ignore_idx) && only_use_f0_harmonics
+    if ~isempty(freq_response_idx) && only_use_f0_harmonics
 
-        freq_to_keep_idx = [freq_to_ignore_idx; N - freq_to_ignore_idx + 2]; 
+        freq_to_keep_idx = [freq_response_idx; N - freq_response_idx + 2]; 
                 
         % make sure that the small bands we will keep around each harmonic
         % will not overlap between neighouring harmonics 
-        if (f0_to_ignore / 2) < (keep_band_around_f0_harmonics(2) * fs / N)
-            warning(['The band around each harmonic will span %.3f Hz. \n', ...
+        if (response_f0 / 2) < (keep_band_around_f0_harmonics(2) * fs / N)
+            warning('get_acf:bandTooWide', ...
+                    ['The band around each harmonic will span %.3f Hz. \n', ...
                      'But the spacing between successive response harmonics is only %.3f Hz. \n', ...
                      'This means that the bands around successive harmonics will overlap...\n'], ...
                 keep_band_around_f0_harmonics(2) * fs / N, ...
-                f0_to_ignore); 
+                response_f0); 
         end
         
         keep_kernel = [...
@@ -549,7 +559,6 @@ if rm_ap
             mask(idx_start : freq_to_keep_idx(fi)) = flip(keep_kernel); 
         end
                 
-        
         % bloody acrobatics to get the proper array casting ... 
         tmp = bsxfun(@times, ...
                      permute(X_norm, flip([1:ndims(X_norm)])), ...
@@ -560,41 +569,7 @@ if rm_ap
         X_norm(idx{:}) = permute(tmp, flip([1:ndims(X_norm)])); 
         
         X_norm_frex_only = X_norm; 
-        X_norm_frex_only(idx{:}) = permute(tmp, flip([1:ndims(X_norm)])); 
-        
-        
-        
-        
-%         nv = ndims(x) - 1;  % exclude last dimension
-%         idx_while_loop = [repmat({1}, 1, nv), {':'}]; 
-%         max_size_per_dim = size(x); % size of each dimension
-%         ready = false; 
-%         
-%         X_norm_frex_only = nan(size(X_norm)); 
-%         while ~ready
-%             % apply mask
-%             X_norm_frex_only(idx_while_loop{:}) = ...
-%                 squeeze(x(idx_while_loop{:})) .* mask; 
-%             % Update the index vector:
-%             % Assume that the WHILE loop is ready
-%             ready = true;       
-%              % Loop through dimensions
-%             for k = 1:nv        
-%                 % Increase current index by 1
-%                 idx_while_loop{k} = idx_while_loop{k} + 1;   
-%                 % Does it exceed the length of current dim?
-%                 if idx_while_loop{k} <= max_size_per_dim(k) 
-%                    % No, WHILE loop is not ready now
-%                    ready = false;  
-%                    % idx_while_loop(k) increased successfully, leave "for k" loop
-%                    break;         
-%                 end
-%                 % Reset idx_while_loop{k}, proceed to next k
-%                 idx_while_loop{k} = 1;          
-%             end
-%         end
-% 
-%         X_norm = X_norm_frex_only; 
+        X_norm_frex_only(idx{:}) = permute(tmp, flip([1:ndims(X_norm)]));         
         
     end
         
@@ -740,14 +715,14 @@ if plot_diagnostic
 
     plot_fft(freq, mX_to_plot, ...
              'ax', ax, ...
-             'frex_meter_rel', freq_to_ignore, ...
+             'frex_meter_rel', freq_response, ...
              'maxfreqlim', nyq, ...
              'linew', 1); 
     ax.YAxis.Visible = 'on';
     ax.XAxis.Visible = 'on';
     ax.XTick = [0, nyq];
-    if ~isempty(freq_to_ignore)
-        ax.YLim = [0, max(mX_to_plot(freq_to_ignore_idx))];
+    if ~isempty(freq_response)
+        ax.YLim = [0, max(mX_to_plot(freq_response_idx))];
     end
     
     
@@ -774,12 +749,12 @@ if plot_diagnostic
 
         plot_fft(freq, mX_to_fit_plot, ...
                  'ax', ax, ...
-                 'frex_meter_rel', freq_to_ignore, ...
+                 'frex_meter_rel', freq_response, ...
                  'maxfreqlim', nyq, ...
                  'linew', 1); 
         ax.YAxis.Visible = 'off';
-        if ~isempty(freq_to_ignore)
-            ax.YLim = [0, max(mX_to_plot(freq_to_ignore_idx))];
+        if ~isempty(freq_response)
+            ax.YLim = [0, max(mX_to_plot(freq_response_idx))];
         end
         ax.XAxis.Visible = 'on';
         ax.XTick = [0, nyq];
@@ -802,7 +777,7 @@ if plot_diagnostic
     % ===========================================================================
 
     freq_all = [0 : N-1] / N * fs;
-    freq_to_keep_idx = [freq_to_ignore_idx; N - freq_to_ignore_idx + 2]; 
+    freq_to_keep_idx = [freq_response_idx; N - freq_response_idx + 2]; 
 
     pnl(2, 2).pack('v', 4);
 
