@@ -1,4 +1,4 @@
-function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = ...
+function [acf, lags, ap_linear, mX, freq, x_norm, X_norm, ap_par, ap_optim_exitflag] = ...
                                                 get_acf(x, fs, varargin)
 % Get autocorrelation of time-domain x. Optionally removes 1/f component. 
 % 
@@ -9,11 +9,13 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = .
 % fs : int
 %     Sampling rate.
 % rm_ap : bool, default=false
-%     Whether to fit and remove the aperiodic component (1/f) from acf.
-% ap_fit_method : string, {'fooof', 'irasa'}, default='fooof'
+%     Whether to fit and remove the aperiodic component (1/f) from acf. 
+% ap_fit_method : string, {'fooof', 'irasa', 'bins_around'}, default='fooof'
 %     Name of the method that will be use to estimate the 1/f component.
 %     IRASA method is paramter free. For FOOOF, additional arguments can be
-%     tweaked, such as `f0_to_ignore`, and `ap_fit_flims`.
+%     tweaked, such as `f0_to_ignore`, and `ap_fit_flims`. For the
+%     bins_around method, consider also providing the fundamental frequency
+%     of the response (`f0_to_ignore` parameter). g
 % response_f0 : float, optional
 %     Fundamental frequency that characterizes the a-priori known rate of
 %     the periodic response. If provided, this value will be used (1)
@@ -22,14 +24,30 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = .
 %     harmonics of this frequency will be kept during noise correction
 %     (after subtracting the 1/f component). 
 % only_use_f0_harmonics : bool, default=true
-%     If true, after removing the estimated 1/f component, only complex
-%     values at harmonics of `response_f0` Hz (if provided), will be kept.
-%     Everything else will be set to zero, and ACF will be computed on the
-%     resulting complex spectrum. This option should be used when we have a
-%     perfectly periodic signal, and we know the exact fundamnetal
-%     frequency to which the signal will project. This is powerful
-%     information that can be used to separate even better siganl from
-%     noise.
+%     If true, and the `f0_to_ignore` parameter is provided, after removing the
+%     estimated 1/f component, only complex values at harmonics of f0 will be
+%     retained. Everything else will be set to zero, and ACF will be computed
+%     on the resulting spectrum. This option should be used when we have a
+%     perfectly periodic signal, and we know the exact fundamnetal frequency at
+%     which the signal will project. This is powerful information that can be
+%     used to separate even better siganl from noise. 
+% keep_band_around_f0_harmonics : [int, int], default=[1, 1]
+%     If `only_use_f0_harmonics` is True, the noise-correction procedure
+%     will only keep response harmonics in the spectrum before computing
+%     the ACF. This parameter will determine the width of the band around
+%     each harmonic of the response that will be retained in the spectrum.
+%     For example (indicated in the figure below), if this perameter is set
+%     to [20, 30], then +/-20 bins around each respose harmonic will be
+%     untouched, and bins from +/-20 to +/-30, will be progressively
+%     (linarly) attenuated. Bins outside the +/-30 region will be set to
+%     zero. To only keep the exact bin at each response harmonic and zero
+%     out everything else, set this parameter equal to [1, 1] (default).
+%                                 _______________
+%                                /       |       \
+%                               /        |        \                                              
+%          ____________________/         |         \____________________
+%                           -30 -20      0      20  30
+% 
 % bins : [int, int], default=[2, 5]
 %     Minimum and maximum frequency bin (on both sides) used to ignore
 %     frequencies during 1/f fitting (does not apply to IRASA).
@@ -78,12 +96,15 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = .
 % mX : array_like, shape=[..., frequency]
 %     Magnitude spectra (frequencies are on the last dimension).
 % freq : array_like
-%     Frequencies for the FFT.
-% ap_par : cell
-%     Parameters of the fittted 1/f component.
+%     Frequencies for the FFT. 
 % x_norm : array_like
-%     1/f-normalized spectrum converted back to time domain (same shape as
-%     x).
+%     1/f-normalized spectrum converted back to time domain (same shape as x).
+% X_norm : array_like
+%     Cnoise-corrected complex spectrum (1/f-subtracted and noise zeroed
+%     out if requested by the user). This specrtum has been used to compute
+%     the ACF.
+% ap_par : cell
+%     Parameters of the fittted 1/f component. 
 % ap_optim_exitflag : array_like
 %     Optimalization exitflag for each aperiodic fit.
 % 
@@ -100,6 +121,7 @@ addParameter(parser, 'ap_fit_flims', [0.1, fs/2])
 addParameter(parser, 'acf_flims', [0, Inf])
 addParameter(parser, 'response_f0', [])
 addParameter(parser, 'only_use_f0_harmonics', true)
+addParameter(parser, 'keep_band_around_f0_harmonics', [1, 1])
 addParameter(parser, 'bins', [2, 5])
 addParameter(parser, 'verbose', 0)
 addParameter(parser, 'plot_diagnostic', false)
@@ -107,6 +129,9 @@ addParameter(parser, 'normalize_x', true)
 addParameter(parser, 'force_x_positive', false)
 addParameter(parser, 'normalize_acf_to_1', false)
 addParameter(parser, 'normalize_acf_z', false)
+
+
+
 
 parse(parser, varargin{:})
 
@@ -125,7 +150,10 @@ max_iter            = parser.Results.max_iter;
 ap_fit_flims        = parser.Results.ap_fit_flims; 
 acf_flims           = parser.Results.acf_flims; 
 response_f0         = parser.Results.response_f0; 
-only_use_f0_harmonics = parser.Results.only_use_f0_harmonics; 
+only_use_f0_harmonics = ...
+                      parser.Results.only_use_f0_harmonics; 
+keep_band_around_f0_harmonics = ...
+                      parser.Results.keep_band_around_f0_harmonics; 
 bins                = parser.Results.bins; 
 plot_diagnostic     = parser.Results.plot_diagnostic; 
 
@@ -203,9 +231,37 @@ if fit_ap
     freq_response = [response_f0 : response_f0 : nyq]'; 
     freq_response_idx = dsearchn(freq, freq_response); 
 
-    % for 1/f fitting, replace harmonics of f0 with mean of the bins around
-    mX_to_fit = mX; 
-    if strcmp(ap_fit_method, 'fooof')
+    % Replace harmonics of f0 with mean of the bins around. This will be
+    % used for 1/f fitting with FOOOF, and, in fact, this is already an
+    % estimate of the 1/f noise component that is the output of the
+    % "bins_around" method. 
+    mX_without_response = mX; 
+    if strcmp(ap_fit_method, 'fooof') || ...
+       strcmp(ap_fit_method, 'bins_around')        
+        % if the user didnt' provide response fundamental frequency
+        % (response f0), this loop can still run but the output may not
+        % be reliable - let's issue a warning just to be sure they know
+        % what they are doing 
+        if isempty(freq_response)
+            warning([
+                '1/f fitting with "%s" but no response frequency provided. \n',  ...
+                'Just making sure you know what you are doing. \n', ...
+                'Consider using the `f0_to_ignore` parameter', ...
+                ], ap_fit_method); 
+        else
+            % check that the distance between harmonics of the response is
+            % larger than the furthest bin that will be used to estimate
+            % noise
+            if (response_f0 < (bins(2) * fs / N))
+                warning([
+                    'the surrouding bins used to estimate noise magnitude ', ...
+                    'are too wide (%d to %d). \nThe noise ', ... 
+                    'estimate will be bad since it will capture the response ', ...
+                    'at the next/previos \nresponse harmonc (f0 = %.1f Hz)'], ...
+                    bins(1), bins(2), response_f0); 
+            end
+        end
+        
         for i_f=1:length(freq_response)
             idx_1 = max(freq_response_idx(i_f) - bins(2), 1); 
             idx_2 = max(freq_response_idx(i_f) - bins(1), 1); 
@@ -220,10 +276,17 @@ if fit_ap
             index = cell(1, ndims(x));
             index(:) = {':'};
             index{end} = freq_response_idx(i_f);
-            mX_to_fit(index{:}) = mean_around_bin; 
+            mX_without_response(index{:}) = mean_around_bin; 
         end
     end
-            
+    
+    if strcmp(ap_fit_method, 'fooof')
+        mX_to_fit = mX_without_response; 
+    elseif strcmp(ap_fit_method, 'irasa') || ...
+           strcmp(ap_fit_method, 'bins_around')
+        mX_to_fit = mX; 
+    end
+    
     % allocate
     shape = size(x);
     shape(end) = length(freq); 
@@ -250,6 +313,13 @@ if fit_ap
         
         % fit aperiodic component
         if strcmp(ap_fit_method, 'fooof')
+            
+            % FOOOF 
+            % -----
+            % This method requires spectra without sharp peaks. This is
+            % why we will use spectrum where we have set the magnitude at
+            % each response frequency to the avergae magnitude at
+            % surrounding frequency bins.
             
             % get log power spectra
             log_pow = log10(squeeze(mX_to_fit(idx_while_loop{:})) .^ 2); 
@@ -282,28 +352,88 @@ if fit_ap
             
         elseif strcmp(ap_fit_method, 'irasa')
             
+            % IRASA 
+            % ----- 
+            % This method takes time-domain signal as an input,
+            % and removes any periodic activity without knowing anything
+            % about the rate of the periodicities. This is why we don't
+            % need to care about peaks at response frequencies in the
+            % magnitude spectrum. For details and discussion, see : 
+            % -> Gerster et al. Neuroinform 20, 991?1012 (2022)
+            
+            % set of scaling factors 
             hset = [1.1 : 0.05 : 2]; 
             
+            % estimate 1/f component 
             spec = amri_sig_fractal(squeeze(x(idx_while_loop{:})), fs, ...
                                     'frange', [0, fs/4], ...
                                     'hset', hset);
             
-            freq_to_fit = freq(freq > 0 & freq <= fs/4); 
-            
+            % The output is power spectrum
             ap_pow = spec.frac; 
+
+            % The output we get from IRASA has different frequency
+            % resolution, so we have to interpolate it to the frequency
+            % resolution of our signal. 
+            freq_to_fit = freq(freq > 0 & freq <= fs/4); 
             
             ap_pow_rs = interp1(spec.freq, ap_pow, freq_to_fit);
             
-            % add 0 Hz
+            % add zero magnitude at 0 Hz (IRASA removes/ignores 0 Hz)
             ap_pow_rs = [0; ap_pow_rs]; 
             
-            % append zeros to fill the rest of the spectrm up to nyquist 
+            % The valid output of IRASA is only up to the original nyquist
+            % times the highest scaling factor. E.g. if the highest scaling
+            % factor is 2, then the maximum valid frequency in the output
+            % will be nyquist / 2. This is good to keep in mind and sample
+            % the signal at a rate that is sufficiently high, so that the
+            % response is well captured even after the necessary bandwidth
+            % reduction by IRASA. Assuming this is the case, we can simply
+            % append zeros to fill the rest of the spectrm up to nyquist. 
             ap_pow_rs = [ap_pow_rs; zeros(hN - length(ap_pow_rs), 1)]; 
-                                
+                 
+            % Convert power spectrum back to magnitude spectrum
             ap_linear_rs = sqrt(ap_pow_rs); 
             
+            % assign to the output array
             ap_linear(idx_while_loop{:}) = ap_linear_rs; 
-                                                                                
+            
+            
+        elseif strcmp(ap_fit_method, 'bins_around')
+            
+            % bins_around 
+            % ----------- 
+            % This method is inspired by the way
+            % noise correction is implemented in many frequency-tagging
+            % studies. In letswave6 matlab package, this procedure is
+            % implemented in the function RLW_SNR(). The idea is very
+            % simple: go over the spectrum bin by bin. At each frequency
+            % bin take the average magnitude at several neighbouring
+            % frequency bins and subtract this value from the magnitude at
+            % the current frequency bin. This method is based on the
+            % assumption that the noise is smooth and broadband while
+            % response is periodic and reflected in sharp peaks in the
+            % spectrum. Even though this method is not optimal for 1/f
+            % noise (the steeper the worse), but most of the time it's good
+            % enough, and incredibly fast.
+            
+            if ~isempty(freq_response)
+                % if we have information about the frequencies in the
+                % response, we can directly use a function from rnb_tools
+                % and simply replace the magnitude at response bin with the
+                % mean magnitude of the surrounding bins
+                ap_estim = mX_without_response(idx_while_loop{:});                 
+            else 
+                % if we don't know the frequencies where the response is,
+                % we need to do the same thin to each single frequency bin
+                ap_estim = interp_noise_bins(mX(idx_while_loop{:}), ...
+                                             [1:length(mX)], ...
+                                             bins(1), bins(2)); 
+            end
+            
+            % assign the result 
+            ap_linear(idx_while_loop{:}) = ap_estim; 
+            
         end
         
 
@@ -329,13 +459,16 @@ if fit_ap
 end
 
 
-% get ACF
-% -------
+% Noise correction: 
+% -----------------
 
 % get full complex spectra
 X = fft(x, [], ndims(x)) ./ N .* 2; 
 
 if rm_ap
+
+    % subtract estimated 1/f 
+    % ----------------------
 
     % If the first frequency bin is zero, the value of estimated aperiodic
     % value will be Inf. As we're going to divide by AP bin by bin, let's set
@@ -348,7 +481,7 @@ if rm_ap
         ap_for_norm(index{:}) = 1; 
     end
 
-    % mirror the aperiodic compoent so we also have it for negative frequencies 
+    % mirror the aperiodic component so we also have it for negative frequencies 
     index = cell(1, ndims(x));
     index(:) = {':'};
     if mod(N, 2) == 0
@@ -391,19 +524,52 @@ if rm_ap
     % retain this if diagnostic plots are requested
     X_norm_all_frex = X_norm; 
     
+    % keep only response frequencies
+    % ------------------------------
+    
     % If we know which frequency bins the signal is going to project to, we can
     % simply ONLY RETAIN SIGNAL FREQUENCIES and set the complex numbers at all
     % other frequency bins to zero. 
     if ~isempty(freq_response_idx) && only_use_f0_harmonics
 
         freq_to_keep_idx = [freq_response_idx; N - freq_response_idx + 2]; 
-        index = repmat({':'}, 1, ndims(x)); 
-        index{end} = freq_to_keep_idx; 
+                
+        % make sure that the small bands we will keep around each harmonic
+        % will not overlap between neighouring harmonics 
+        if (response_f0 / 2) < (keep_band_around_f0_harmonics(2) * fs / N)
+            warning(['The band around each harmonic will span %.3f Hz. \n', ...
+                     'But the spacing between successive response harmonics is only %.3f Hz. \n', ...
+                     'This means that the bands around successive harmonics will overlap...\n'], ...
+                keep_band_around_f0_harmonics(2) * fs / N, ...
+                response_f0); 
+        end
+        
+        keep_kernel = [...
+                ones(1, keep_band_around_f0_harmonics(1)), ...
+                linspace(1, 0, keep_band_around_f0_harmonics(2) -1) ...
+                ]; 
+        
+        mask = zeros(1, size(X_norm, ndims(X_norm)));             
+        for fi=1:length(freq_to_keep_idx)
+            idx_end = freq_to_keep_idx(fi) + length(keep_kernel) - 1; 
+            mask(freq_to_keep_idx(fi) : idx_end) = keep_kernel; 
 
-        X_norm_frex_only = zeros(size(X_norm)); 
-        X_norm_frex_only(index{:}) = X_norm(index{:}); 
-
-        X_norm = X_norm_frex_only; 
+            idx_start = freq_to_keep_idx(fi) - length(keep_kernel) + 1; 
+            mask(idx_start : freq_to_keep_idx(fi)) = flip(keep_kernel); 
+        end
+                
+        % bloody acrobatics to get the proper array casting ... 
+        tmp = bsxfun(@times, ...
+                     permute(X_norm, flip([1:ndims(X_norm)])), ...
+                     ensure_col(mask)); 
+        
+        idx = repmat({':'}, 1, ndims(X_norm)); 
+        
+        X_norm(idx{:}) = permute(tmp, flip([1:ndims(X_norm)])); 
+        
+        X_norm_frex_only = X_norm; 
+        X_norm_frex_only(idx{:}) = permute(tmp, flip([1:ndims(X_norm)]));         
+        
     end
         
 else
@@ -412,6 +578,11 @@ else
     X_norm = X;
         
 end
+
+
+
+% Only use limited frequency range 
+% --------------------------------
 
 % If requested, zero out frequencies outside of requested range before 
 % computing the ACF
@@ -438,6 +609,10 @@ index{end} = find(flims_mask_all);
 X_norm_flims = zeros(size(X_norm)); 
 X_norm_flims(index{:}) = X_norm(index{:}); 
 X_norm = X_norm_flims; 
+
+
+% get ACF
+% -------
 
 % Convert 1/f-normalized spectrum back to time domain. 
 if get_x_norm
