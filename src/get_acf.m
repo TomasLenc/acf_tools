@@ -22,21 +22,22 @@ function [acf, lags, ap_linear, mX, freq, x_norm, X_norm, ap_par, ap_optim_exitf
 %     perfectly periodic signal, and we know the exact fundamnetal frequency at
 %     which the signal will project. This is powerful information that can be
 %     used to separate even better siganl from noise. 
-% keep_band_around_f0_harmonics : [int, int], default=[0, 1]
+% keep_band_around_f0_harmonics : [int, int], default=[1, 1]
 %     If `only_use_f0_harmonics` is True, the noise-correction procedure
 %     will only keep response harmonics in the spectrum before computing
 %     the ACF. This parameter will determine the width of the band around
 %     each harmonic of the response that will be retained in the spectrum.
-%     For example, if this perameter is set to [20, 30], then a band of ±30
-%     bins will be kept around each respose harmonic. From bins ±20, there
-%     will be a linear ramp, as indicated in the figure below:
-%                             _______________
-%                            /       |       \
-%                           /        |        \
-%                          /         |         \
-%                       -30 -20      0      20 30
-%     To only keep the exact bin at each response harmonic and zero out
-%     everything else, set this parameter equal to [1, 1]. 
+%     For example (indicated in the figure below), if this perameter is set
+%     to [20, 30], then ±20 bins around each respose harmonic will be
+%     untouched, and bins from ±20 to ±30, will be progressively (linarly)
+%     attenuated. Bins outside the ±30 region will be set to zero. To only
+%     keep the exact bin at each response harmonic and zero out everything
+%     else, set this parameter equal to [1, 1] (default).
+%                                 _______________
+%                                /       |       \
+%                               /        |        \                                              
+%          ____________________/         |         \____________________
+%                           -30 -20      0      20  30
 % f0_to_ignore : float, optional
 %     Fundamental frequency that will be ignored during 1/f fitting, along with 
 %     all its harmonics. 
