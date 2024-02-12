@@ -1,4 +1,4 @@
-function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = ...
+function [acf, lags, ap_linear, mX, freq, x_norm, X_norm, ap_par, ap_optim_exitflag] = ...
                                                 get_acf(x, fs, varargin)
 % Get autocorrelation of time-domain x. Optionally removes 1/f component. 
 % 
@@ -22,6 +22,22 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = .
 %     perfectly periodic signal, and we know the exact fundamnetal frequency at
 %     which the signal will project. This is powerful information that can be
 %     used to separate even better siganl from noise. 
+% keep_band_around_f0_harmonics : [int, int], default=[1, 1]
+%     If `only_use_f0_harmonics` is True, the noise-correction procedure
+%     will only keep response harmonics in the spectrum before computing
+%     the ACF. This parameter will determine the width of the band around
+%     each harmonic of the response that will be retained in the spectrum.
+%     For example (indicated in the figure below), if this perameter is set
+%     to [20, 30], then +/-20 bins around each respose harmonic will be
+%     untouched, and bins from +/-20 to +/-30, will be progressively
+%     (linarly) attenuated. Bins outside the +/-30 region will be set to
+%     zero. To only keep the exact bin at each response harmonic and zero
+%     out everything else, set this parameter equal to [1, 1] (default).
+%                                 _______________
+%                                /       |       \
+%                               /        |        \                                              
+%          ____________________/         |         \____________________
+%                           -30 -20      0      20  30
 % f0_to_ignore : float, optional
 %     Fundamental frequency that will be ignored during 1/f fitting, along with 
 %     all its harmonics. 
@@ -71,10 +87,14 @@ function [acf, lags, ap_linear, mX, freq, ap_par, x_norm, ap_optim_exitflag] = .
 %     Magnitude spectra (frequencies are on the last dimension). 
 % freq : array_like
 %     Frequencies for the FFT. 
-% ap_par : cell
-%     Parameters of the fittted 1/f component. 
 % x_norm : array_like
 %     1/f-normalized spectrum converted back to time domain (same shape as x).
+% X_norm : array_like
+%     Cnoise-corrected complex spectrum (1/f-subtracted and noise zeroed
+%     out if requested by the user). This specrtum has been used to compute
+%     the ACF.
+% ap_par : cell
+%     Parameters of the fittted 1/f component. 
 % ap_optim_exitflag : array_like
 %     Optimalization exitflag for each aperiodic fit. 
 % 
@@ -91,6 +111,7 @@ addParameter(parser, 'ap_fit_flims', [0.1, fs/2])
 addParameter(parser, 'acf_flims', [0, Inf])
 addParameter(parser, 'f0_to_ignore', [])
 addParameter(parser, 'only_use_f0_harmonics', true)
+addParameter(parser, 'keep_band_around_f0_harmonics', [1, 1])
 addParameter(parser, 'bins', [2, 5])
 addParameter(parser, 'verbose', 0)
 addParameter(parser, 'plot_diagnostic', false)
@@ -98,6 +119,9 @@ addParameter(parser, 'normalize_x', true)
 addParameter(parser, 'force_x_positive', false)
 addParameter(parser, 'normalize_acf_to_1', false)
 addParameter(parser, 'normalize_acf_z', false)
+
+
+
 
 parse(parser, varargin{:})
 
@@ -116,7 +140,10 @@ max_iter            = parser.Results.max_iter;
 ap_fit_flims        = parser.Results.ap_fit_flims; 
 acf_flims           = parser.Results.acf_flims; 
 f0_to_ignore        = parser.Results.f0_to_ignore; 
-only_use_f0_harmonics = parser.Results.only_use_f0_harmonics; 
+only_use_f0_harmonics = ...
+                      parser.Results.only_use_f0_harmonics; 
+keep_band_around_f0_harmonics = ...
+                      parser.Results.keep_band_around_f0_harmonics; 
 bins                = parser.Results.bins; 
 plot_diagnostic     = parser.Results.plot_diagnostic; 
 
@@ -320,13 +347,16 @@ if fit_ap
 end
 
 
-% get ACF
-% -------
+% Noise correction: 
+% -----------------
 
 % get full complex spectra
 X = fft(x, [], ndims(x)) ./ N .* 2; 
 
 if rm_ap
+
+    % subtract estimated 1/f 
+    % ----------------------
 
     % If the first frequency bin is zero, the value of estimated aperiodic
     % value will be Inf. As we're going to divide by AP bin by bin, let's set
@@ -382,19 +412,87 @@ if rm_ap
     % retain this if diagnostic plots are requested
     X_norm_all_frex = X_norm; 
     
+    % keep only response frequencies
+    % ------------------------------
+    
     % If we know which frequency bins the signal is going to project to, we can
     % simply ONLY RETAIN SIGNAL FREQUENCIES and set the complex numbers at all
     % other frequency bins to zero. 
     if ~isempty(freq_to_ignore_idx) && only_use_f0_harmonics
 
         freq_to_keep_idx = [freq_to_ignore_idx; N - freq_to_ignore_idx + 2]; 
-        index = repmat({':'}, 1, ndims(x)); 
-        index{end} = freq_to_keep_idx; 
+                
+        % make sure that the small bands we will keep around each harmonic
+        % will not overlap between neighouring harmonics 
+        if (f0_to_ignore / 2) < (keep_band_around_f0_harmonics(2) * fs / N)
+            warning(['The band around each harmonic will span %.3f Hz. \n', ...
+                     'But the spacing between successive response harmonics is only %.3f Hz. \n', ...
+                     'This means that the bands around successive harmonics will overlap...\n'], ...
+                keep_band_around_f0_harmonics(2) * fs / N, ...
+                f0_to_ignore); 
+        end
+        
+        keep_kernel = [...
+                ones(1, keep_band_around_f0_harmonics(1)), ...
+                linspace(1, 0, keep_band_around_f0_harmonics(2) -1) ...
+                ]; 
+        
+        mask = zeros(1, size(X_norm, ndims(X_norm)));             
+        for fi=1:length(freq_to_keep_idx)
+            idx_end = freq_to_keep_idx(fi) + length(keep_kernel) - 1; 
+            mask(freq_to_keep_idx(fi) : idx_end) = keep_kernel; 
 
-        X_norm_frex_only = zeros(size(X_norm)); 
-        X_norm_frex_only(index{:}) = X_norm(index{:}); 
-
-        X_norm = X_norm_frex_only; 
+            idx_start = freq_to_keep_idx(fi) - length(keep_kernel) + 1; 
+            mask(idx_start : freq_to_keep_idx(fi)) = flip(keep_kernel); 
+        end
+                
+        
+        % bloody acrobatics to get the proper array casting ... 
+        tmp = bsxfun(@times, ...
+                     permute(X_norm, flip([1:ndims(X_norm)])), ...
+                     ensure_col(mask)); 
+        
+        idx = repmat({':'}, 1, ndims(X_norm)); 
+        
+        X_norm(idx{:}) = permute(tmp, flip([1:ndims(X_norm)])); 
+        
+        X_norm_frex_only = X_norm; 
+        X_norm_frex_only(idx{:}) = permute(tmp, flip([1:ndims(X_norm)])); 
+        
+        
+        
+        
+%         nv = ndims(x) - 1;  % exclude last dimension
+%         idx_while_loop = [repmat({1}, 1, nv), {':'}]; 
+%         max_size_per_dim = size(x); % size of each dimension
+%         ready = false; 
+%         
+%         X_norm_frex_only = nan(size(X_norm)); 
+%         while ~ready
+%             % apply mask
+%             X_norm_frex_only(idx_while_loop{:}) = ...
+%                 squeeze(x(idx_while_loop{:})) .* mask; 
+%             % Update the index vector:
+%             % Assume that the WHILE loop is ready
+%             ready = true;       
+%              % Loop through dimensions
+%             for k = 1:nv        
+%                 % Increase current index by 1
+%                 idx_while_loop{k} = idx_while_loop{k} + 1;   
+%                 % Does it exceed the length of current dim?
+%                 if idx_while_loop{k} <= max_size_per_dim(k) 
+%                    % No, WHILE loop is not ready now
+%                    ready = false;  
+%                    % idx_while_loop(k) increased successfully, leave "for k" loop
+%                    break;         
+%                 end
+%                 % Reset idx_while_loop{k}, proceed to next k
+%                 idx_while_loop{k} = 1;          
+%             end
+%         end
+% 
+%         X_norm = X_norm_frex_only; 
+        
     end
         
 else
@@ -403,6 +501,11 @@ else
     X_norm = X;
         
 end
+
+
+
+% Only use limited frequency range 
+% --------------------------------
 
 % If requested, zero out frequencies outside of requested range before 
 % computing the ACF
@@ -429,6 +532,10 @@ index{end} = find(flims_mask_all);
 X_norm_flims = zeros(size(X_norm)); 
 X_norm_flims(index{:}) = X_norm(index{:}); 
 X_norm = X_norm_flims; 
+
+
+% get ACF
+% -------
 
 % Convert 1/f-normalized spectrum back to time domain. 
 if get_x_norm
