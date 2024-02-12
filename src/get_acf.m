@@ -219,7 +219,7 @@ if fit_ap
             % noise
             if (f0_to_ignore < (bins(2) * fs / N))
                 warning([
-                    'the surrouding bins used to estimate noise magniude ', ...
+                    'the surrouding bins used to estimate noise magnitude ', ...
                     'are too wide (%d to %d). \nThe noise ', ... 
                     'estimate will be bad since it will capture the response ', ...
                     'at the next/previos \nresponse harmonc (f0 = %.1f Hz)'], ...
@@ -372,14 +372,14 @@ if fit_ap
             % studies. In letswave6 matlab package, this procedure is
             % implemented in the function RLW_SNR(). The idea is very
             % simple: go over the spectrum bin by bin. At each frequency
-            % bin take the avreage magnitude at several neighbouring
+            % bin take the average magnitude at several neighbouring
             % frequency bins and subtract this value from the magnitude at
             % the current frequency bin. This method is based on the
             % assumption that the noise is smooth and broadband while
             % response is periodic and reflected in sharp peaks in the
             % spectrum. Even though this method is not optimal for 1/f
             % noise (the steeper the worse), but most of the time it's good
-            % enough, and incredibly fast. 
+            % enough, and incredibly fast.
             
             if ~isempty(freq_to_ignore)
                 % if we have information about the frequencies in the
@@ -442,7 +442,7 @@ if rm_ap
         ap_for_norm(index{:}) = 1; 
     end
 
-    % mirror the aperiodic compoent so we also have it for negative frequencies 
+    % mirror the aperiodic component so we also have it for negative frequencies 
     index = cell(1, ndims(x));
     index(:) = {':'};
     if mod(N, 2) == 0
