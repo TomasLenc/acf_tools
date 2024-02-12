@@ -61,16 +61,16 @@ x = add_signal_noise(x_clean, noise, snr);
 
 % ==============================================================
 
-% when fitting the 1/f noise, we will ignore peaks at frequencies 
+% When fitting the 1/f noise, we will ignore peaks at frequencies 
 % corresponding to the pattern repetition frequency and 
-% harmonics. 
-pat_f0_to_ignore = 1 / (length(pat) * grid_ioi); 
+% harmonics where the response is expected to occur. 
+response_f0 = 1 / (length(pat) * grid_ioi); 
 
 % compute ACF after accounting for 1/f noise  
 [acf_norm, lags, aperiodic_estimate, mX_raw, freqs] = get_acf(x, ...
                                  sampling_rate, ...
                                  'rm_ap', true, ...
-                                 'f0_to_ignore', pat_f0_to_ignore, ...
+                                 'response_f0', response_f0, ...
                                  'ap_fit_flims', [0.1, 9], ...
                                  'plot_diagnostic', true);
                              
@@ -145,7 +145,7 @@ box(ax, 'off');
 % plot raw FFT
 ax = subplot(3, 3, 6); 
 max_freq_to_plot = 10; 
-signal_frequencies = [pat_f0_to_ignore : pat_f0_to_ignore : max_freq_to_plot]; 
+signal_frequencies = [response_f0 : response_f0 : max_freq_to_plot]; 
 plot_fft(freqs, mX_raw, ...
          'ax', ax, ....
          'maxfreqlim', max_freq_to_plot, ...
