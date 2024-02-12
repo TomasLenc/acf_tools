@@ -349,6 +349,36 @@ function test_acf_f0_ignore_band_multidim(test_case)
 end
 
 
+function test_acf_f0_ignore_band_too_wide(test_case)
+
+    fs = 100; 
+    trial_dur = 60; 
+    noise = pinknoise(fs * trial_dur)'; 
+    noise = zscore(noise); 
+    
+    p0 = 0.8; 
+    s = zeros(size(noise)); 
+    event = ones(1, round(0.2 * fs)); 
+    onsets = [p0 : p0 : trial_dur-p0];
+    for i=1:length(onsets)
+        idx = round(onsets(i) * fs); 
+        s(idx+1 : idx+length(event)) = event; 
+    end
+    x = s + noise;
+                                               
+    verifyWarning(test_case, ...
+        @() get_acf(...
+               x, fs, ...
+               'rm_ap', true, ...
+               'response_f0', 1/p0, ...
+               'only_use_f0_harmonics', true, ...
+               'keep_band_around_f0_harmonics', [2, 40] ...
+               ), ...
+        'get_acf:bandTooWide');                                   
+                                       
+end
+
+
 function test_acf_irasa(test_case)
 
     fs = 100; 
