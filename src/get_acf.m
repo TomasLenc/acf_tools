@@ -28,11 +28,11 @@ function [acf, lags, ap_linear, mX, freq, x_norm, X_norm, ap_par, ap_optim_exitf
 %     the ACF. This parameter will determine the width of the band around
 %     each harmonic of the response that will be retained in the spectrum.
 %     For example (indicated in the figure below), if this perameter is set
-%     to [20, 30], then ±20 bins around each respose harmonic will be
-%     untouched, and bins from ±20 to ±30, will be progressively (linarly)
-%     attenuated. Bins outside the ±30 region will be set to zero. To only
-%     keep the exact bin at each response harmonic and zero out everything
-%     else, set this parameter equal to [1, 1] (default).
+%     to [20, 30], then +/-20 bins around each respose harmonic will be
+%     untouched, and bins from +/-20 to +/-30, will be progressively
+%     (linarly) attenuated. Bins outside the +/-30 region will be set to
+%     zero. To only keep the exact bin at each response harmonic and zero
+%     out everything else, set this parameter equal to [1, 1] (default).
 %                                 _______________
 %                                /       |       \
 %                               /        |        \                                              
