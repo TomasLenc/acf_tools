@@ -687,6 +687,29 @@ function test_acf_flims(test_case)
 end
 
 
+function test_acf_normalization_to_pearson(test_case)
+    % Test whether we get the same autocorrelation value when time-shifting
+    % the signal and taking Pearson's correlation, and when we first
+    % z-score the signal in the time domain, then take ACF, and then scale
+    % it so that lag 0 has value 1. 
 
+    % create random signal
+    fs = 128; 
+    N = fs * 100; 
+    x = get_colored_noise(N, fs, -1); 
 
+    % choose arbitrary lag in seconds
+    lag = 1.27; 
 
+    % shift the siganl and take Pearson
+    lag_idx_pearson = round(lag * fs); 
+    r = correlation(x, circshift(x, lag_idx_pearson)); 
+
+    % get normalized ACF (should be default)
+    [acf, lags] = get_acf(x, fs); 
+
+    lag_idx_acf = dsearchn(lags', lag); 
+
+    verifyEqual(test_case, r,  acf(lag_idx_acf), 'AbsTol', 1e-12)
+
+end

@@ -74,10 +74,12 @@ function [acf, lags, ap_linear, mX, freq, x_norm, X_norm, ap_par, ap_optim_exitf
 %     are plotted in the diagnostic plot.
 % get_x_norm : bool, default=false
 %     Whether to also return 1/f-subtracted signal in the time domain.
-% normalize_x : bool, default=true
+% normalize_x : bool, default=false
 %     Normalize time-domain input to mean 0 and SD 1 (i.e. zscore).
-% normalize_acf_to_1 : bool, default=false
-%     Divide the resulting full ACF by its maximum value.
+% normalize_acf_to_1 : bool, default=true
+%     Divide the resulting full ACF by its maximum value. This will make
+%     the output values equivalent to taking Pearson's correlations between
+%     the input x and its time-shifted versions. 
 % normalize_acf_z : bool, default=false
 %     Normalize the restulting full ACF to mean 0 and SD 1 (i.e. zscore).
 % verbose : int {0, 1, 2}, optional, default=0
@@ -125,13 +127,10 @@ addParameter(parser, 'keep_band_around_f0_harmonics', [1, 1])
 addParameter(parser, 'bins', [2, 5])
 addParameter(parser, 'verbose', 0)
 addParameter(parser, 'plot_diagnostic', false)
-addParameter(parser, 'normalize_x', true)
+addParameter(parser, 'normalize_x', false)
 addParameter(parser, 'force_x_positive', false)
-addParameter(parser, 'normalize_acf_to_1', false)
+addParameter(parser, 'normalize_acf_to_1', true)
 addParameter(parser, 'normalize_acf_z', false)
-
-
-
 
 parse(parser, varargin{:})
 
@@ -625,7 +624,10 @@ acf = real(ifft(X_norm .* conj(X_norm), [], ndims(x)));
 
 % scale ACF to +-1
 if normalize_acf_to_1
-    acf = acf ./ max(abs(acf), [], ndims(acf)); 
+    index = cell(1, ndims(acf));
+    index(:) = {':'};
+    index{end} = 1;   
+    acf = acf ./ acf(index{:}); 
 end
 
 % zscore ACF
@@ -639,16 +641,16 @@ index(:) = {':'};
 index{end} = 1:hN;   
 acf = acf(index{:}); 
 
-% set acf at lag 0 to the value of lag 1 (it's just variance anyway)
-if lags(1) == 0
-    index_0 = cell(1, ndims(x));
-    index_0(:) = {':'};
-    index_0{end} = 1;   
-    index_1 = cell(1, ndims(x));
-    index_1(:) = {':'};
-    index_1{end} = 2;       
-    acf(index_0{:}) = acf(index_1{:}); 
-end
+% % set acf at lag 0 to the value of lag 1 (it's just variance anyway)
+% if lags(1) == 0
+%     index_0 = cell(1, ndims(x));
+%     index_0(:) = {':'};
+%     index_0{end} = 1;   
+%     index_1 = cell(1, ndims(x));
+%     index_1(:) = {':'};
+%     index_1{end} = 2;       
+%     acf(index_0{:}) = acf(index_1{:}); 
+% end
 
 % set DC to 0 for output (it's just the mean)
 index = cell(1, ndims(x));
