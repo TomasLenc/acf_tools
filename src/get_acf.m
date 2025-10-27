@@ -203,6 +203,12 @@ mX = mX(index{:});
 % get lags for ACF
 lags = [0 : hN-1] / fs; 
 
+% find all response harmonics of f0 up to nyquist frequency
+if ~isempty(response_f0)
+    freq_response = [response_f0 : response_f0 : nyq]'; 
+    freq_response_idx = dsearchn(freq, freq_response); 
+end
+
 
 % fit 1/f if requested
 % --------------------
@@ -226,10 +232,6 @@ if fit_ap
     max_freq_idx = dsearchn(freq, ap_fit_flims(2)); 
     freq_to_fit = freq(min_freq_idx : max_freq_idx); 
     
-    % ignore all harmonics of f0 up to nyquist frequency
-    freq_response = [response_f0 : response_f0 : nyq]'; 
-    freq_response_idx = dsearchn(freq, freq_response); 
-
     % Replace harmonics of f0 with mean of the bins around. This will be
     % used for 1/f fitting with FOOOF, and, in fact, this is already an
     % estimate of the 1/f noise component that is the output of the
@@ -543,7 +545,7 @@ end
 % If we know which frequency bins the signal is going to project to, we can
 % simply ONLY RETAIN SIGNAL FREQUENCIES and set the complex numbers at all
 % other frequency bins to zero. 
-if ~isempty(freq_response_idx) && only_use_f0_harmonics
+if ~isempty(response_f0) && only_use_f0_harmonics
 
     if ~rm_ap
         warning('Using F0 harmonics without removing 1/f first. I assume you know what you are doing.'); 
