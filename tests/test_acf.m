@@ -541,6 +541,89 @@ end
 
 
 
+function test_only_f0_without_ap_removal(test_case)
+
+    fs = 100; 
+    trial_dur = 60; 
+    % get noise
+    noise = pinknoise(fs * trial_dur)'; 
+    noise = zscore(noise); 
+    % get signal 
+    p0 = 0.8; 
+    s = zeros(size(noise)); 
+    event = ones(1, round(0.2 * fs)); 
+    onsets = [p0 : p0 : trial_dur-p0];
+    for i=1:length(onsets)
+        idx = round(onsets(i) * fs); 
+        s(idx+1 : idx+length(event)) = event; 
+    end
+    % mix them 
+    x = s + noise;        
+        
+    % original signal (ground truth)
+    [acf_orig, lags, ~, mX_orig, freq] = get_acf(...
+                                       s, fs, ...
+                                       'rm_ap', false ...
+                                       );     
+    
+    % wihtout 1/f subtraction 
+    [acf_raw, lags, ap, mX, freq] = get_acf(...
+                                       x, fs, ...
+                                       'rm_ap', false ...
+                                       );     
+                                   
+
+    % 1/f subtraction
+    [acf_step1, lags, ap, mX, freq] = get_acf(...
+                                       x, fs, ...
+                                       'rm_ap', true, ...
+                                       'response_f0', 1/p0, ...
+                                       'only_use_f0_harmonics', false, ...
+                                       'ap_fit_method', 'irasa', ...
+                                       'plot_diagnostic', false ...
+                                       ); 
+                                   
+    % without 1/f subtraction but only keep F0 harmonics
+    [acf_step2, lags, ap, mX, freq] = get_acf(...
+                                       x, fs, ...
+                                       'rm_ap', false, ...
+                                       'response_f0', 1/p0, ...
+                                       'only_use_f0_harmonics', true, ...
+                                       'plot_diagnostic', false ...
+                                       ); 
+                                   
+    % 1/f subtraction and only keep F0 harmonics
+    [acf_step1_and_2, lags, ap, mX, freq] = get_acf(...
+                                       x, fs, ...
+                                       'rm_ap', true, ...
+                                       'response_f0', 1/p0, ...
+                                       'only_use_f0_harmonics', true, ...
+                                       'plot_diagnostic', false ...
+                                       ); 
+                                   
+                                   
+    % the acf with only F0 harmonics should be periodic!                                 
+    chunks = epoch_chunks(acf_step2, fs, p0);     
+    err = abs(chunks(1,:) - chunks(2:end,:)); 
+    assert(max(err(:)) < 1e-13)
+    
+    chunks = epoch_chunks(acf_step1_and_2, fs, p0);     
+    err = abs(chunks(1,:) - chunks(2:end,:)); 
+    assert(max(err(:)) < 1e-13)
+    
+    % but without this step, the ACF shouldn'y be periodic! 
+    chunks = epoch_chunks(acf_raw, fs, p0);     
+    err = abs(chunks(1,:) - chunks(2:end,:)); 
+    assert(max(err(:)) > 1e-13)
+    
+    chunks = epoch_chunks(acf_step1, fs, p0);     
+    err = abs(chunks(1,:) - chunks(2:end,:)); 
+    assert(max(err(:)) > 1e-13)
+    
+end
+
+
+
 
 function test_mX_multidim(test_case)
 
