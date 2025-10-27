@@ -528,54 +528,6 @@ if rm_ap
     % retain this if diagnostic plots are requested
     X_norm_all_frex = X_norm; 
     
-    % keep only response frequencies
-    % ------------------------------
-    
-    % If we know which frequency bins the signal is going to project to, we can
-    % simply ONLY RETAIN SIGNAL FREQUENCIES and set the complex numbers at all
-    % other frequency bins to zero. 
-    if ~isempty(freq_response_idx) && only_use_f0_harmonics
-
-        freq_to_keep_idx = [freq_response_idx; N - freq_response_idx + 2]; 
-                
-        % make sure that the small bands we will keep around each harmonic
-        % will not overlap between neighouring harmonics 
-        if (response_f0 / 2) < (keep_band_around_f0_harmonics(2) * fs / N)
-            warning('get_acf:bandTooWide', ...
-                    ['The band around each harmonic will span %.3f Hz. \n', ...
-                     'But the spacing between successive response harmonics is only %.3f Hz. \n', ...
-                     'This means that the bands around successive harmonics will overlap...\n'], ...
-                keep_band_around_f0_harmonics(2) * fs / N, ...
-                response_f0); 
-        end
-        
-        keep_kernel = [...
-                ones(1, keep_band_around_f0_harmonics(1)), ...
-                linspace(1, 0, keep_band_around_f0_harmonics(2) -1) ...
-                ]; 
-        
-        mask = zeros(1, size(X_norm, ndims(X_norm)));             
-        for fi=1:length(freq_to_keep_idx)
-            idx_end = freq_to_keep_idx(fi) + length(keep_kernel) - 1; 
-            mask(freq_to_keep_idx(fi) : idx_end) = keep_kernel; 
-
-            idx_start = freq_to_keep_idx(fi) - length(keep_kernel) + 1; 
-            mask(idx_start : freq_to_keep_idx(fi)) = flip(keep_kernel); 
-        end
-                
-        % bloody acrobatics to get the proper array casting ... 
-        tmp = bsxfun(@times, ...
-                     permute(X_norm, flip([1:ndims(X_norm)])), ...
-                     ensure_col(mask)); 
-        
-        idx = repmat({':'}, 1, ndims(X_norm)); 
-        
-        X_norm(idx{:}) = permute(tmp, flip([1:ndims(X_norm)])); 
-        
-        X_norm_frex_only = X_norm; 
-        X_norm_frex_only(idx{:}) = permute(tmp, flip([1:ndims(X_norm)]));         
-        
-    end
         
 else
     
@@ -584,6 +536,59 @@ else
         
 end
 
+
+% Keep only response frequencies
+% ------------------------------
+
+% If we know which frequency bins the signal is going to project to, we can
+% simply ONLY RETAIN SIGNAL FREQUENCIES and set the complex numbers at all
+% other frequency bins to zero. 
+if ~isempty(freq_response_idx) && only_use_f0_harmonics
+
+    if ~rm_ap
+        warning('Using F0 harmonics without removing 1/f first. I assume you know what you are doing.'); 
+    end
+    
+    freq_to_keep_idx = [freq_response_idx; N - freq_response_idx + 2]; 
+
+    % make sure that the small bands we will keep around each harmonic
+    % will not overlap between neighouring harmonics 
+    if (response_f0 / 2) < (keep_band_around_f0_harmonics(2) * fs / N)
+        warning('get_acf:bandTooWide', ...
+                ['The band around each harmonic will span %.3f Hz. \n', ...
+                 'But the spacing between successive response harmonics is only %.3f Hz. \n', ...
+                 'This means that the bands around successive harmonics will overlap...\n'], ...
+            keep_band_around_f0_harmonics(2) * fs / N, ...
+            response_f0); 
+    end
+
+    keep_kernel = [...
+            ones(1, keep_band_around_f0_harmonics(1)), ...
+            linspace(1, 0, keep_band_around_f0_harmonics(2) -1) ...
+            ]; 
+
+    mask = zeros(1, size(X_norm, ndims(X_norm)));             
+    for fi=1:length(freq_to_keep_idx)
+        idx_end = freq_to_keep_idx(fi) + length(keep_kernel) - 1; 
+        mask(freq_to_keep_idx(fi) : idx_end) = keep_kernel; 
+
+        idx_start = freq_to_keep_idx(fi) - length(keep_kernel) + 1; 
+        mask(idx_start : freq_to_keep_idx(fi)) = flip(keep_kernel); 
+    end
+
+    % bloody acrobatics to get the proper array casting ... 
+    tmp = bsxfun(@times, ...
+                 permute(X_norm, flip([1:ndims(X_norm)])), ...
+                 ensure_col(mask)); 
+
+    idx = repmat({':'}, 1, ndims(X_norm)); 
+
+    X_norm(idx{:}) = permute(tmp, flip([1:ndims(X_norm)])); 
+
+    X_norm_frex_only = X_norm; 
+    X_norm_frex_only(idx{:}) = permute(tmp, flip([1:ndims(X_norm)]));         
+
+end
 
 
 % Only use limited frequency range 
