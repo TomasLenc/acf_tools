@@ -93,7 +93,12 @@ z = zscore(subsref(acf, subs_cmd), [], ndims(acf));
 subs_cmd.subs{end} = [1 : length(lags_meter_rel_idx)];
 z_meter_rel = mean(subsref(z, subs_cmd), ndims(acf)); 
 
-% acf ratio 
+% z-score normalized between -1 and 1
+z_meter_rel_norm = normalize_zscore(z_meter_rel, ...
+                        numel(lags_meter_rel) + numel(lags_meter_unrel), ...
+                        numel(lags_meter_rel)); 
+
+    % acf ratio 
 ratio_meter_rel = acf_mean_meter_rel ./ acf_mean_meter_unrel;
 
 % log-ratio 
@@ -110,6 +115,7 @@ diff_meter_rel = acf_mean_meter_rel - acf_mean_meter_unrel;
 feat = []; 
 feat.diff_meter_rel = diff_meter_rel; 
 feat.z_meter_rel = z_meter_rel; 
+feat.z_meter_rel_norm = z_meter_rel_norm; 
 feat.ratio_meter_rel = ratio_meter_rel; 
 feat.log_ratio_meter_rel = log_ratio_meter_rel; 
 feat.contrast_meter_rel = contrast_meter_rel; 
